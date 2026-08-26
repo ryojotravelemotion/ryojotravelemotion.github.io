@@ -373,8 +373,13 @@ select.btn option { background: var(--card); color: var(--text); }
 @media (max-aspect-ratio: 7/5) {
   #app { flex-direction: column; }
 
-  #side { width: 100%; max-height: 46vh; flex: none;
+  /* 高さは「中身のぶんだけ」使う。ただし地図の取り分は必ず残す。
+     割合で決め打ちすると、中身が短いときは余白が空き、
+     長いときは切れる。中身に合わせて伸ばし、足りなくなったら
+     パネル側が縮んで巻物になる、という順にする。 */
+  #side { width: 100%; flex: 0 1 auto; min-height: 0; max-height: 62vh;
     border-right: 0; border-bottom: 1px solid var(--line); }
+  #mapWrap { min-height: 38vh; }
 
   /* 上に来たら横長になるので、題字と副題と旅の名前を一列に並べる */
   #brand { display: flex; align-items: center; gap: 14px;
@@ -392,15 +397,15 @@ select.btn option { background: var(--card); color: var(--text); }
   body.intro #brand h1 { font-size: 26px; letter-spacing: 8px; text-indent: 8px;
     margin-bottom: 0; }
   body.intro #brand p { font-size: 10.5px; letter-spacing: 2px; }
-  body.intro #side { max-height: 52vh; }
 }
 
-/* 窓がとても低いとき（横長のノートパソコンなど）は、
-   上に置いてもパネルが場所を取りすぎないようにする */
-@media (max-aspect-ratio: 7/5) and (max-height: 620px) {
-  #side { max-height: 54vh; }
-  body.intro #side { max-height: 60vh; }
-}
+/* 上に置いたときのオープニング画面は、左右に分ける。
+
+   縦に積むと横幅が余るうえ、パネルが縦に伸びて地図を圧迫する。
+   左に「探す・つなぐ・見る」と乗り物の帯、右に検索欄を置けば、
+   横幅を使いきれて、そのぶん地図に高さを譲れる。
+
+   狭い画面（640px未満）では2列にすると窮屈なので、縦積みのままにする。 */
 #introSteps { display: none; padding: 14px 14px 4px; border-bottom: 1px solid var(--line);
   background: linear-gradient(#fdfcf8, #f7f3ea); }
 body.intro #introSteps { display: block; }
@@ -412,6 +417,48 @@ body.intro #brand h1 { font-size: 38px; letter-spacing: 11px; text-indent: 11px;
 body.intro #brand p { font-size: 11px; letter-spacing: 3px; }
 body.intro #searchBox { padding: 14px 14px 0; }
 body.intro #q { padding: 12px 12px; font-size: 13px; }
+
+@media (max-aspect-ratio: 7/5) and (min-width: 640px) {
+  body.intro #side {
+    display: grid;
+    align-content: start;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-areas:
+      "brand   brand"
+      "flow    search"
+      "demo    note"
+      "credits credits";
+  }
+
+  /* #introSteps という箱そのものを畳んで、中身（3つの手順・乗り物の帯・説明文）を
+     直接この升目に並べる。そうしないと、箱ごと左の列に入ってしまい、
+     右の列が検索欄だけで空いてしまう。 */
+  body.intro #introSteps { display: contents; }
+
+  body.intro #brand    { grid-area: brand; }
+  body.intro #introFlow { grid-area: flow; margin: 0; padding: 12px 18px 0; }
+  body.intro #introDemo { grid-area: demo; padding: 0 18px; margin-bottom: 0; }
+  body.intro #introSteps .note { grid-area: note; padding: 6px 18px 8px; }
+  body.intro #credits  { grid-area: credits; border-top: 1px solid var(--line2); }
+
+  /* 検索欄は右の列の上寄り。3つの手順と高さが揃う。 */
+  body.intro #searchBox { grid-area: search; align-self: center;
+    padding: 12px 18px 0; }
+
+  /* 左右に分けたぶん縦は詰められる。題字を小さくして、
+     そのぶんの高さを地図に譲る。 */
+  body.intro #brand { padding: 11px 18px 9px; }
+  body.intro #brand h1 { font-size: 21px; letter-spacing: 6px; text-indent: 6px; }
+  body.intro #brand p { font-size: 10px; letter-spacing: 1.5px; }
+}
+
+/* 窓がとても低いとき（横長のノートパソコンなど）は、
+   上に置いてもパネルが場所を取りすぎないようにする。
+   左右に分けているときは既に短いので、広げない。 */
+@media (max-aspect-ratio: 7/5) and (max-height: 620px) and (max-width: 639px) {
+  #side { max-height: 54vh; }
+  body.intro #side { max-height: 60vh; }
+}
 
 #introFlow { display: flex; align-items: stretch; margin: 2px 0 10px; }
 #introFlow .st { flex: 1; text-align: center; }
