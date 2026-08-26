@@ -103,6 +103,21 @@ body.mode-story #side { display: none; }
   padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
 
 #listWrap { flex: 1; overflow-y: auto; padding: 10px; }
+/* 一覧の末尾に出す「次はここを探す」の案内。
+   番号を出しておくと、いま何番目を作っているのかが分かる。 */
+#nextSpot { display: none; width: 100%; margin: 10px 0 4px; padding: 11px 10px;
+  background: var(--card); border: 1px dashed var(--line); border-radius: 4px;
+  color: var(--muted); font-size: 12px; font-family: inherit; cursor: pointer;
+  align-items: center; justify-content: center; gap: 9px; }
+body.has-spots #nextSpot { display: flex; }
+body.mode-story #nextSpot { display: none; }
+#nextSpot:hover { border-color: var(--accent); color: var(--accent-d);
+  border-style: solid; }
+#nextSpot .no { flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--line2); color: var(--muted); font-size: 11px;
+  display: flex; align-items: center; justify-content: center; }
+#nextSpot:hover .no { background: var(--accent); color: #fff; }
+
 #empty { color: var(--muted); font-size: 11.5px; text-align: center;
   padding: 26px 12px; line-height: 1.9; border: 1px dashed var(--line);
   border-radius: 9px; background: #fdfcf8; }
@@ -270,6 +285,12 @@ body.mode-story #story { display: block; }
   font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
 /* 地名が長い旅程のとき用 */
 #story .cover h1.long { font-size: 30px; letter-spacing: 1px; line-height: 1.45; }
+
+/* 路線を名前で絞り込む欄 */
+.lineFind { width: 100%; padding: 7px 9px; margin-bottom: 6px; font-size: 11px;
+  border: 1px solid var(--line); border-radius: 3px; background: var(--card);
+  color: var(--text); font-family: inherit; }
+.lineFind:focus { outline: none; border-color: var(--accent); }
 #story .cover p { color: var(--muted); font-size: 12px; letter-spacing: 4px; margin: 22px 0 0; }
 #story .end h2 { font-size: 24px; margin: 0;
   font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
@@ -782,6 +803,10 @@ body.odpt-open #odptPanel { display: flex; }
     <div id="listWrap">
       <div id="list"></div>
       <div id="empty">まだ何も追加されていません<br>上の検索欄から、旅の出発地を探してください</div>
+
+      <!-- 一覧の末尾に「次は何番目を探すのか」を示す。
+           検索欄は上にあるので、押すとそこへ案内する。 -->
+      <button id="nextSpot"><span class="no"></span>次の場所を検索</button>
     </div>
 
     <div id="adSlot">
@@ -931,11 +956,14 @@ body.odpt-open #odptPanel { display: flex; }
 <script>
 "use strict";
 
-const MODES = {
-  rail: { label: '鉄道（直線）', ico: '🚆', api: null, shape: 'straight',
-    travel: { zoom: 7.6, pitch: 42, ms: 7000, min: 4500, max: 9000, samples: 3, look: 0.10 } },
+/* 以前は鉄道が「直線」と「線路に沿う」の2つに分かれていた。
+   だが線路が見つからないときは自動で直線に落ちるので、
+   わざわざ直線を選ぶ理由が無い。選択肢を分ける意味がないので1つにした。
 
-  railTrack: { label: '鉄道（線路に沿う）', ico: '🛤️', api: null, shape: 'track',
+   古い旅程（共有リンクやJSON）には mode:'rail' が残っているので、
+   読み込むときに railTrack へ読み替える。 */
+const MODES = {
+  railTrack: { label: '鉄道', ico: '🚆', api: null, shape: 'track',
     travel: { zoom: 8.4, pitch: 48, ms: 14000, min: 7000, max: 16000, samples: 5, look: 0.09 } },
 
   /* バスは道路を走る。以前は直線で結んでいたが、それでは山も海も突っ切ってしまう。
@@ -988,6 +1016,9 @@ function viaCoords(s) {
 }
 
 function isRail(mode) { return mode === 'rail' || mode === 'railTrack'; }
+
+// 廃止した「鉄道（直線）」を、線路をたどるほうへ読み替える
+function legacyMode(m) { return (!m || m === 'rail') ? 'railTrack' : m; }
 
 function stationRole(i) { return i === 0 ? '乗車駅' : '乗換駅'; }
 
@@ -1655,7 +1686,9 @@ async function linesNear(ds, p) {
     let gj;
     try { gj = await lineGeometry(ds, rough[i].id); } catch (e) { continue; }
     const d = minDistToLine(gj, p);
-    if (d <= ds.near) hits.push({ id: rough[i].id, name: rough[i].name, score: d });
+    if (d <= ds.near) hits.push({ id: rough[i].id, name: rough[i].name,
+                                  operator: rough[i].operator,
+                                  category: rough[i].category, score: d });
   }
 
   hits.sort(function (x, y) { return x.score - y.score; });
@@ -1714,10 +1747,40 @@ async function railLinks() {
    両方が停まる米原で乗り換える、という道筋をここで自動的に見つける。
 
    路線を点、乗換駅を線とみなして、乗り換えの少ない順に探す。 */
-async function railTransferSegment(a, b) {
-  const from = (await linesNear(RAIL, a)).slice(0, 6);
+async function railTransferSegment(a, b, mustUse) {
+  const nearA = await linesNear(RAIL, a);
   const to = (await linesNear(RAIL, b)).slice(0, 6);
-  if (!from.length || !to.length) return null;
+  if (!nearA.length || !to.length) return null;
+
+  /* 使った路線が指定されているとき。
+     それが出発地の近くを通っているなら、そこからだけ探し始める。
+     東京→大阪で「東海道新幹線」を選べば新幹線経由、
+     「東海道線」を選べば在来線経由、と分かれるのはここ。 */
+  let from = nearA.slice(0, 6);
+  let avoidShinkansen = false;
+
+  if (mustUse) {
+    const seed = nearA.filter(function (l) { return l.id === mustUse; });
+    if (seed.length) {
+      from = seed;
+
+      /* 在来線を選んだのに、途中で新幹線に乗り換える道筋が出てくることがある。
+         東京→大阪なら「東海道線 → 東海道新幹線 → 東海道線」という具合。
+         乗り換えの回数だけで見ると、それも最短の1つになってしまう。
+
+         だが「在来線で行った」と指定した人が求めているのはそれではない。
+         新幹線以外を選んだときは、新幹線を通らない道筋を探す。
+         逆に新幹線を選んだときは、在来線も使ってよい（新大阪から大阪まではそうなる）。 */
+      avoidShinkansen = seed[0].category !== 'shinkansen';
+    }
+  }
+
+  const blocked = async function (id) {
+    if (!avoidShinkansen) return false;
+    const idx = await lineIndex(RAIL);
+    const meta = idx.lines.find(function (l) { return l.id === id; });
+    return !!meta && meta.category === 'shinkansen';
+  };
 
   const goal = {};
   to.forEach(function (l) { goal[l.id] = true; });
@@ -1741,11 +1804,16 @@ async function railTransferSegment(a, b) {
 
       const nb = link.get(last);
       if (!nb) continue;
-      nb.forEach(function (coords, other) {
-        if (seen[other]) return;
+
+      const others = [];
+      nb.forEach(function (coords, other) { others.push(other); });
+      for (let j = 0; j < others.length; j++) {
+        const other = others[j];
+        if (seen[other]) continue;
+        if (await blocked(other)) continue;
         seen[other] = true;
         next.push(path.concat([other]));
-      });
+      }
     }
     queue = next;
   }
@@ -1804,9 +1872,21 @@ async function segmentOn(ds, id, a, b) {
   return shortestPath(g, na.idx, nb.idx);
 }
 
+/* 選んだ路線が、両方の地点にちゃんと届いているか。
+
+   届いていないまま使うと、いちばん近い所へ強引に寄せた線が返ってくる。
+   たとえば東京→大阪で東海道新幹線を選んだ場合、新幹線は大阪駅に来ないので、
+   新大阪で終わる線ができてしまう。そういうときは乗り換えを探しにいく。 */
+async function lineReaches(ds, id, a, b) {
+  try {
+    const gj = await lineGeometry(ds, id);
+    return minDistToLine(gj, a) <= ds.near && minDistToLine(gj, b) <= ds.near;
+  } catch (e) { return false; }
+}
+
 async function trackSegment(ds, a, b, line) {
   // 線が選ばれていれば、その上だけをたどる
-  if (line && line.id) {
+  if (line && line.id && await lineReaches(ds, line.id, a, b)) {
     const seg = await segmentOn(ds, line.id, a, b);
     if (seg) return seg;
   }
@@ -1821,7 +1901,7 @@ async function trackSegment(ds, a, b, line) {
   /* 1本でつながらないときは、乗り換えを挟んで探す。
      鉄道だけの仕組み。船には駅にあたるものが無い。 */
   if (ds === RAIL) {
-    const seg = await railTransferSegment(a, b);
+    const seg = await railTransferSegment(a, b, line ? line.id : null);
     if (seg) return seg;
   }
 
@@ -1914,12 +1994,13 @@ async function buildLeg(i) {
 
 // 2地点から経路を作る。旅程の再生も、はじめの画面も、ここを通る。
 async function buildLegBetween(a, b) {
-  const mode = MODES[b.mode] ? b.mode : 'rail';
+  const mode = MODES[b.mode] ? b.mode : 'railTrack';
   const via = viaCoords(b);
 
   const key = mode + '|' + a.coord.join(',') + '|' +
               via.map(function (v) { return v.join(','); }).join(';') + '|' +
               viaList(b).map(function (v) { return v.line ? v.line.name : ''; }).join(';') + '|' +
+              (b.legLine ? b.legLine.id : '') + '|' +
               b.coord.join(',');
   /* 同じ経路は作り直さない。
      ただし、どの空港を使ったかの記録は作り直しのときにしか更新されないので、
@@ -1944,7 +2025,14 @@ async function buildLegBetween(a, b) {
   } else if (conf.shape === 'track') {
 
     const pts = [a.coord].concat(via, [b.coord]);
-    const lines = [null].concat(viaList(b).map(function (v) { return v.line || null; }));
+
+    /* どの路線を使ったかの指定。
+       乗車駅を置いている場合は、駅ごとに選んだ路線がそのまま効く。
+       置いていない場合は、区間まるごとに対する指定（legLine）を使う。
+       東京→大阪で「新幹線か在来線か」を決められるのはこちら。 */
+    const lines = viaList(b).length
+      ? [null].concat(viaList(b).map(function (v) { return v.line || null; }))
+      : [b.legLine || null];
     try {
       coords = await trackLeg(RAIL, pts, lines);
     } catch (err) {
@@ -2341,7 +2429,7 @@ function flyAlong(coords, duration, o) {
 
 const INTRO_SPOTS = [
   { name: '札幌', wiki: '札幌市時計台', coord: [141.3507, 43.0687],
-    date: '2026年8月1日', mode: 'rail', via: [],
+    date: '2026年8月1日', mode: 'railTrack', via: [],
     note: '朝いちばんの札幌駅。ここから南へ、二千キロ。',
     zoom: 15.2, pitch: 60, bearing: 20 },
 
@@ -2858,6 +2946,7 @@ function renderList() {
   const box = $('#list');
   box.innerHTML = '';
   $('#empty').style.display = spots.length ? 'none' : 'block';
+  $('#nextSpot .no').textContent = String(spots.length + 1);
 
   spots.forEach(function (s, i) {
     if (i > 0) {
@@ -2954,6 +3043,120 @@ function renderList() {
 function nextStationName(s, k) {
   const list = viaList(s);
   return (k + 1 < list.length) ? (list[k + 1].n || '') : (s.name || '');
+}
+
+/* 区間まるごとに対する路線の指定。乗車駅を置いていないときに出す。
+
+   「東京から大阪へ、新幹線で行ったのか在来線だったのか」を決めるところ。
+   出発地の近くを通る路線を並べるので、両方の地点に届く1本が無くてもよい。
+   数が多くなるので、名前で絞り込めるようにしてある。 */
+function buildLegLineRow(s, prevCoord) {
+  const wrap = document.createElement('div');
+
+  const row = document.createElement('div');
+  row.className = 'lineRow';
+
+  const label = document.createElement('span');
+  label.className = 'lbl';
+  label.textContent = '↳ 路線';
+
+  const val = document.createElement('span');
+  val.className = 'val';
+  val.textContent = s.legLine ? s.legLine.name : '未選択（自動で探します）';
+
+  const btn = document.createElement('button');
+  btn.textContent = s.legLine ? '変更' : '選ぶ';
+
+  const box = document.createElement('div');
+  box.className = 'lineList';
+
+  btn.addEventListener('click', async function () {
+    if (box.childNodes.length) { box.innerHTML = ''; return; }
+
+    btn.disabled = true;
+    val.textContent = '路線を探しています…';
+
+    let found = [];
+    try {
+      found = await linesNear(RAIL, prevCoord);
+    } catch (err) {
+      console.warn('路線データ', err);
+    }
+    btn.disabled = false;
+    val.textContent = s.legLine ? s.legLine.name : '未選択（自動で探します）';
+
+    if (!found.length) {
+      box.innerHTML = '<div class="none">出発地の近くを通る路線が見つかりませんでした</div>';
+      return;
+    }
+
+    // 名前で絞り込む欄
+    const filter = document.createElement('input');
+    filter.className = 'lineFind';
+    filter.type = 'text';
+    filter.placeholder = '路線名で絞り込む（例：新幹線）';
+    box.appendChild(filter);
+
+    const items = document.createElement('div');
+    box.appendChild(items);
+
+    const draw = function () {
+      const q = filter.value.trim();
+      items.innerHTML = '';
+
+      const hits = q
+        ? found.filter(function (l) {
+            return (l.name + ' ' + (l.operator || '')).indexOf(q) >= 0;
+          })
+        : found;
+
+      if (!hits.length) {
+        items.innerHTML = '<div class="none">「' + q + '」に当てはまる路線がありません</div>';
+        return;
+      }
+
+      hits.forEach(function (ln) {
+        const item = document.createElement('button');
+        item.className = 'lineItem' +
+          (s.legLine && s.legLine.id === ln.id ? ' on' : '');
+
+        const tag = document.createElement('span');
+        tag.className = 'src ksj';
+        tag.textContent = ln.operator || '';
+        item.appendChild(tag);
+        item.appendChild(document.createTextNode(ln.name));
+
+        item.addEventListener('click', async function () {
+          s.legLine = { name: ln.name, id: ln.id, operator: ln.operator };
+          await rebuild();
+          toast(ln.name + ' で行ったことにしました');
+        });
+        items.appendChild(item);
+      });
+    };
+
+    filter.addEventListener('input', draw);
+    draw();
+    filter.focus();
+
+    if (s.legLine) {
+      const clear = document.createElement('button');
+      clear.className = 'lineItem clear';
+      clear.textContent = '選択を解除（自動で探す）';
+      clear.addEventListener('click', async function () {
+        delete s.legLine;
+        await rebuild();
+      });
+      box.appendChild(clear);
+    }
+  });
+
+  row.appendChild(label);
+  row.appendChild(val);
+  row.appendChild(btn);
+  wrap.appendChild(row);
+  wrap.appendChild(box);
+  return wrap;
 }
 
 function buildLineRow(s, k, station, nextCoord) {
@@ -3120,10 +3323,14 @@ function buildEditForm(s, index) {
     const list = viaList(s);
     const rail = isRail(s.mode);
 
-    if (rail && !list.length) {
+    /* 乗車駅を置いていない鉄道の区間には、区間まるごとの路線選択を出す。
+       駅を置くと駅ごとの選択に切り替わるので、そちらは出さない。 */
+    if (rail && !list.length && index > 0) {
+      stBox.appendChild(buildLegLineRow(s, spots[index - 1].coord));
+
       const empty = document.createElement('div');
       empty.className = 'stEmpty';
-      empty.textContent = 'どの駅から乗りましたか？　下のボタンで指定してください';
+      empty.textContent = '乗り換えた駅がはっきりしている場合は、下のボタンで駅を指定できます';
       stBox.appendChild(empty);
     }
 
@@ -3340,7 +3547,7 @@ async function addStation(s, entry) {
 async function addSpot(o) {
   stopIntro();
   const s = { id: uid++, name: o.name || '新しい場所', date: '', note: '',
-              coord: o.coord, mode: 'rail', via: [], photo: null };
+              coord: o.coord, mode: 'railTrack', via: [], photo: null };
   spots.push(s);
   selectedId = s.id;
   await rebuild();
@@ -3638,6 +3845,15 @@ async function fetchAllAutoImages(onProgress) {
 let prepSkipped = false;
 $('#skipBtn').addEventListener('click', function () { prepSkipped = true; });
 $('#mapFailRetry').addEventListener('click', function () { location.reload(); });
+
+// 一覧の末尾から、上の検索欄へ案内する
+$('#nextSpot').addEventListener('click', function () {
+  selectedId = null;
+  renderList();
+  const q = $('#q');
+  q.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  q.focus();
+});
 
 function setPrep(msg, n, total) {
   $('#prep .st').textContent = msg;
@@ -4103,7 +4319,10 @@ function encodeState() {
   const lite = spots.map(function (s) {
 
     const v = viaList(s).map(function (x) { return [x.c[0], x.c[1], x.n || '']; });
-    return { n: s.name, d: s.date, t: s.note, c: s.coord, m: s.mode, v: v };
+    const o = { n: s.name, d: s.date, t: s.note, c: s.coord, m: s.mode, v: v };
+    // 使った路線を選んでいれば、それも共有リンクに乗せる
+    if (s.legLine) o.l = [s.legLine.id, s.legLine.name, s.legLine.operator || ''];
+    return o;
   });
   const json = JSON.stringify({ name: tripName, s: lite });
   const bytes = new TextEncoder().encode(json);
@@ -4127,8 +4346,11 @@ function decodeState(str) {
         const via = (x.v || []).map(function (e) {
           return (e.length >= 3) ? { c: [e[0], e[1]], n: e[2] } : { c: [e[0], e[1]], n: '' };
         });
-        return { id: uid++, name: x.n, date: x.d, note: x.t, coord: x.c,
-                 mode: x.m || 'rail', via: via, photo: null };
+        const sp = { id: uid++, name: x.n, date: x.d, note: x.t, coord: x.c,
+                     mode: legacyMode(x.m), via: via, photo: null };
+        // 使った路線が指定されていれば復元する
+        if (x.l) sp.legLine = { id: x.l[0], name: x.l[1], operator: x.l[2] || '' };
+        return sp;
       })
     };
   } catch (err) {
@@ -4183,7 +4405,7 @@ $('#jsonFile').addEventListener('change', function (e) {
       tripName = obj.name || '';
       spots = (obj.spots || []).map(function (s) {
         return { id: uid++, name: s.name, date: s.date, note: s.note, coord: s.coord,
-                 mode: s.mode || 'rail',
+                 mode: legacyMode(s.mode),
                  via: viaList(s),
                  photo: s.photo || null };
       });

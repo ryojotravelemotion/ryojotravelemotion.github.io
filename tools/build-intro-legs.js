@@ -88,6 +88,7 @@
     const key = b.mode + '|' + a.coord.join(',') + '|' +
                 via.map(function (v) { return v.join(','); }).join(';') + '|' +
                 viaList(b).map(function (v) { return v.line ? v.line.name : ''; }).join(';') + '|' +
+                (b.legLine ? b.legLine.id : '') + '|' +
                 b.coord.join(',');
 
     const pts = [a.coord].concat(via.slice(0, 23), [b.coord]);
