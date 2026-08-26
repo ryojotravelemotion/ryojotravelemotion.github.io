@@ -530,6 +530,11 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
 #introSteps .opener:hover { border-color: var(--accent); color: var(--accent-d); }
 #introSteps .note { font-size: 10px; color: #9aa5ae; line-height: 1.85; padding: 10px 2px 6px; }
 
+/* 出典。目立たせる必要はないが、押さなくても読める場所に置く。 */
+#credits { padding: 14px 16px 20px; border-top: 1px solid var(--line2);
+  font-size: 9.5px; line-height: 2; color: #a6b0b8; letter-spacing: .3px; }
+#credits b { font-weight: 600; color: #8b969f; }
+
 #introCard { position: fixed; right: 4vw; bottom: 4vh; z-index: 61;
   width: clamp(220px, 22vw, 360px); opacity: 0; pointer-events: none;
   transform: translateY(16px) scale(.97);
@@ -793,6 +798,15 @@ body.odpt-open #odptPanel { display: flex; }
       <div class="grid2">
         <button class="btn sm" id="odptBtn">鉄道データ確認</button>
       </div>
+    </div>
+
+    <!-- 出典。地図の隅にも出しているが、そちらは畳まれていて押さないと読めない。
+         国土数値情報は出典の明記が利用条件、OpenStreetMap も表示が義務。
+         隠すものではなく、むしろ「実際のデータを使っている」証しなので表に出す。 -->
+    <div id="credits">
+      <div>鉄道・県境・海岸線・港　<b>国土数値情報</b>（国土交通省）</div>
+      <div>航路　<b>&copy; OpenStreetMap contributors</b>（ODbL）</div>
+      <div>空港　<b>OurAirports</b>　／　地図・道路　<b>Mapbox</b></div>
     </div>
   </div>
 
