@@ -1,0 +1,4366 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>旅情 — 旅の体験を、動く物語に</title>
+<meta name="description" content="訪れた場所をつなぐと、鉄道は線路を、車は道路を、船は定期航路をたどって地図が動きます。旅の記録を、動く物語に。">
+
+<!-- SNSやLINEに貼ったときに出るカード。
+
+     ここの og:url と og:image は、公開先が決まったら
+     その住所に書き換えてください。相対の指定でも読み取る所はありますが、
+     絶対の住所（https://… から始まる形）で書くのが確実です。 -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="旅情">
+<meta property="og:title" content="旅情 — 旅の体験を、動く物語に">
+<meta property="og:description" content="訪れた場所をつなぐと、鉄道は線路を、車は道路を、船は定期航路をたどって地図が動きます。">
+<meta property="og:image" content="ogp.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:url" content="">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="旅情 — 旅の体験を、動く物語に">
+<meta name="twitter:description" content="訪れた場所をつなぐと、鉄道は線路を、車は道路を、船は定期航路をたどって地図が動きます。">
+<meta name="twitter:image" content="ogp.jpg">
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+
+:root {
+  --bg:      #f5f1e8;
+  --panel:   #fbf8f2;
+  --card:    #ffffff;
+  --line:    #ded6c7;
+  --line2:   #ebe4d8;
+  --text:    #1b2a41;
+  --muted:   #5f6d7c;
+  --accent:  #357a8f;
+  --accent-d:#1b4f63;
+  --ok:      #4a7c59;
+  --shadow:  0 2px 14px rgba(27,42,65,.10);
+  --shadow-l:0 18px 50px rgba(15,26,40,.30);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden;
+  font-family: -apple-system, "Segoe UI", "Hiragino Mincho ProN", "Yu Mincho",
+               "Hiragino Sans", "Noto Sans JP", sans-serif;
+  background: var(--bg); color: var(--text); }
+button, select, input, textarea { font-family: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+#app { display: flex; height: 100%; }
+#side { width: 348px; flex: none; background: var(--panel);
+  border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+#mapWrap { flex: 1; position: relative; background: #e6e1d6; }
+#map { position: absolute; inset: 0; transition: opacity 1.15s ease; }
+body.mode-story #side { display: none; }
+
+#brand { padding: 16px 16px 13px; border-bottom: 1px solid var(--line); }
+#brand h1 { margin: 0; font-size: 22px; letter-spacing: 6px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-weight: 600; }
+#brand p { margin: 4px 0 0; font-size: 10.5px; color: var(--muted); letter-spacing: 1px; }
+#tripName { width: 100%; margin-top: 11px; padding: 9px 10px; font-size: 13px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+#tripName:focus { outline: none; border-color: var(--accent); }
+#tripName::placeholder { color: #a8b3bd; }
+
+#guide { padding: 12px 14px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(#fdfcf8, #f7f3ea); }
+#guide .steps { display: flex; gap: 6px; margin-bottom: 9px; }
+#guide .st { flex: 1; height: 3px; background: var(--line2); border-radius: 2px; }
+#guide .st.done { background: var(--ok); }
+#guide .st.now { background: var(--accent); }
+#guide .msg { font-size: 12px; line-height: 1.6; font-weight: 600; }
+#guide .sub { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.7; }
+
+#searchBox { padding: 11px 10px 0; }
+#q { width: 100%; padding: 10px 11px; font-size: 12.5px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 7px; color: var(--text); }
+#q:focus { outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(53,122,143,.13); }
+#q::placeholder { color: #a8b3bd; }
+#qState { font-size: 10.5px; color: var(--muted); padding: 5px 2px 0; min-height: 15px; }
+#qResults:not(:empty) { margin-top: 4px; border: 1px solid var(--line);
+  border-radius: 7px; overflow: hidden; background: var(--card);
+  max-height: 260px; overflow-y: auto; box-shadow: var(--shadow); }
+.qr { padding: 9px 11px; cursor: pointer; border-bottom: 1px solid var(--line2);
+  display: flex; align-items: center; gap: 10px; }
+.qr:last-child { border-bottom: none; }
+.qr:hover { background: #f2f7f9; }
+.qr .th { width: 46px; height: 46px; flex: none; border-radius: 2px;
+  background: #eef1f3; overflow: hidden; }
+.qr .th.none { background: repeating-linear-gradient(45deg, #f0ece2, #f0ece2 5px, #eae5d9 5px, #eae5d9 10px); }
+.qr .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.qr .tx { min-width: 0; flex: 1; }
+.qr .n { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qr .a { font-size: 10.5px; color: var(--muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qr .tag { font-size: 9.5px; color: #fff; background: var(--accent);
+  padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+
+#listWrap { flex: 1; overflow-y: auto; padding: 10px; }
+#empty { color: var(--muted); font-size: 11.5px; text-align: center;
+  padding: 26px 12px; line-height: 1.9; border: 1px dashed var(--line);
+  border-radius: 9px; background: #fdfcf8; }
+
+.item { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; margin-bottom: 8px; box-shadow: var(--shadow); }
+.item.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(53,122,143,.12); }
+.item .row { display: flex; align-items: center; gap: 8px; }
+.item .no { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--accent);
+  color: #fff; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; }
+.item .nm { flex: 1; font-size: 13px; font-weight: 600; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .dt { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.item .ops { display: flex; gap: 3px; }
+.item .ops button { width: 22px; height: 22px; padding: 0; font-size: 11px; line-height: 1;
+  background: #eef2f4; border: none; border-radius: 4px; color: var(--muted); }
+.item .ops button:hover { background: #d64545; color: #fff; }
+.item .grip { flex: none; cursor: grab; color: #b9c2ca; font-size: 14px;
+  letter-spacing: -2px; user-select: none; padding: 0 2px; }
+.item .grip:active { cursor: grabbing; }
+.item.dragging { opacity: .45; }
+.item.over { border-color: var(--accent); box-shadow: 0 -3px 0 var(--accent); }
+
+.picking { background: var(--ok); color: #fff; border-radius: 4px;
+  padding: 9px 10px; margin-bottom: 7px; display: flex;
+  align-items: center; gap: 8px; flex-wrap: wrap; }
+.picking b { font-size: 11.5px; }
+.picking span { font-size: 10px; flex: 1; min-width: 120px; opacity: .9; }
+.picking button { padding: 5px 12px; font-size: 11px; border: 1px solid rgba(255,255,255,.6);
+  background: rgba(255,255,255,.15); color: #fff; border-radius: 3px; }
+
+.lineRow { display: flex; align-items: center; gap: 6px; padding: 3px 6px 6px 20px; }
+.lineRow .lbl { font-size: 10px; color: var(--muted); flex: none; }
+.lineRow .val { flex: 1; font-size: 10.5px; color: var(--accent-d);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lineRow button { padding: 3px 9px; font-size: 10px; background: #eef2f4;
+  border: 1px solid var(--line); border-radius: 3px; color: var(--text); flex: none; }
+.lineList { padding: 0 6px 8px 20px; }
+.lineList .lineItem { display: block; width: 100%; text-align: left; margin-bottom: 3px;
+  padding: 6px 9px; font-size: 11px; background: #fff; border: 1px solid var(--line);
+  border-radius: 3px; color: var(--text); }
+.lineList .lineItem:hover { border-color: var(--accent); background: #f2f7f9; }
+.lineList .lineItem.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lineList .lineItem.clear { color: var(--muted); }
+.lineList .none { font-size: 10.5px; color: var(--muted); padding: 6px 2px; }
+.item .thumb { width: 100%; height: 74px; object-fit: cover; border-radius: 5px;
+  margin-top: 8px; display: block; }
+
+.legbar { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted);
+  padding: 3px 0 7px 4px; }
+.legbar .ico { font-size: 13px; }
+.legbar .via { color: var(--accent); }
+
+.edit { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line2); }
+.edit input[type=text], .edit textarea, .edit select {
+  width: 100%; margin-bottom: 6px; padding: 7px 9px; font-size: 12px;
+  background: #fdfcf8; border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text); font-family: inherit; resize: vertical; }
+.edit input:focus, .edit textarea:focus, .edit select:focus {
+  outline: none; border-color: var(--accent); }
+.edit label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 3px; }
+.edit .file { font-size: 11px; color: var(--muted); }
+.edit .viaRow { display: flex; gap: 5px; margin-bottom: 6px; }
+.edit .viaRow button { flex: 1; padding: 6px; font-size: 11px; background: #eef2f4;
+  border: 1px solid var(--line); border-radius: 5px; color: var(--text); }
+.edit .viaRow button.armed { background: var(--ok); border-color: var(--ok); color: #fff; }
+
+.legBlock { background: #f2f7f9; border: 1px solid #cfe0e6; border-radius: 4px;
+  padding: 10px; margin-bottom: 11px; }
+.legHead { font-size: 10.5px; color: var(--accent-d); font-weight: 700;
+  margin-bottom: 7px; letter-spacing: .5px; }
+.stEmpty { font-size: 10.5px; color: var(--muted); padding: 6px 2px 8px; line-height: 1.7; }
+.stRow { display: flex; align-items: center; gap: 7px; padding: 5px 6px;
+  background: #fff; border: 1px solid var(--line2); border-radius: 3px; margin-bottom: 4px; }
+.stRow .role { font-size: 9px; color: #fff; background: var(--accent);
+  padding: 2px 6px; border-radius: 3px; flex: none; }
+.stRow .nm { flex: 1; font-size: 11.5px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.stRow button { width: 20px; height: 20px; flex: none; padding: 0; font-size: 11px;
+  background: #eef2f4; border: none; border-radius: 3px; color: var(--muted); }
+.stRow button:hover { background: #d64545; color: #fff; }
+.stRow.dest { background: #f7f5ee; }
+.stRow.dest .role { background: var(--muted); }
+.vpin.first { width: 15px; height: 15px; border-width: 3px; }
+.edit .tip { font-size: 10.5px; line-height: 1.85; color: var(--muted);
+  background: #f0f6f8; border-left: 2px solid var(--accent);
+  padding: 8px 10px; border-radius: 3px; margin-bottom: 7px; }
+.edit .tip b { color: var(--accent-d); }
+
+#tools { padding: 11px; border-top: 1px solid var(--line); display: grid; gap: 6px;
+  background: #f7f3ea; }
+.btn { padding: 10px; font-size: 13px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); border-radius: 7px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-d); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-d); border-color: var(--accent-d); color: #fff; }
+.btn.armed { background: var(--ok); border-color: var(--ok); color: #fff; }
+.btn.sm { padding: 7px 9px; font-size: 11px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.pin { width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); border: 2.5px solid #fff; color: #fff;
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,.45); cursor: pointer; transition: transform .25s; }
+.pin.on { transform: scale(1.5); background: #fff; color: var(--accent-d); }
+.vpin { width: 11px; height: 11px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--accent); box-shadow: 0 1px 5px rgba(0,0,0,.5); }
+
+#hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6;
+  background: var(--ok); color: #fff; padding: 9px 18px; border-radius: 20px;
+  font-size: 12px; box-shadow: var(--shadow-l); display: none; }
+body.arming #hint, body.arming-via #hint { display: block; }
+
+#mapEmpty { position: absolute; inset: 0; z-index: 2; display: flex;
+  align-items: center; justify-content: center; pointer-events: none; }
+#mapEmpty div { background: rgba(251,248,242,.94); border: 1px solid var(--line);
+  padding: 20px 28px; border-radius: 12px; font-size: 12.5px; color: var(--muted);
+  text-align: center; line-height: 2; box-shadow: var(--shadow-l); }
+body.has-spots #mapEmpty, body.mode-story #mapEmpty { display: none; }
+
+#photo {
+  position: absolute; right: 5vw; top: 50%; z-index: 4;
+  width: min(44vw, 620px);
+  opacity: 0; pointer-events: none;
+  transform: translateY(-46%) scale(.97);
+  transition: opacity .9s ease, transform .9s ease;
+}
+#photo.on { opacity: 1; transform: translateY(-50%) scale(1); }
+body.mode-edit #photo { display: none; }
+#photo .frame { background: var(--panel); padding: 10px; border-radius: 4px;
+  border: 1px solid var(--line); box-shadow: var(--shadow-l); }
+#photo img { width: 100%; max-height: 60vh; object-fit: cover; display: block; border-radius: 2px; }
+#photo .cap { margin-top: 9px; font-size: 12px; color: var(--text);
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#photo .cap .dt { color: var(--muted); font-size: 11px; }
+#photo .cap .src { margin-left: auto; font-size: 10px; color: var(--muted); }
+@media (max-width: 1100px) {
+  #photo { right: 3vw; width: 38vw; }
+  #photo img { max-height: 44vh; }
+}
+
+body.playing .chap img, body.playing .chap .noimg { display: none; }
+
+/* 章は一度に1つだけ見せる。スクロールはしない。 */
+#story { display: none; position: absolute; inset: 0; z-index: 3; overflow: hidden; }
+body.mode-story #story { display: block; }
+#story .inner { width: 100%; max-width: 460px; margin-left: 7vw; height: 100%;
+  display: flex; align-items: center; }
+#story .step { display: none; width: 100%; }
+#story .step.active { display: block; }
+/* 表紙と最後の頁だけは中身を縦に積んで中央に置く。
+
+   ここで単に .cover / .end に display:flex と書くと、
+   すぐ上の「.step は隠す」より後に書いてあるぶん強くなり、
+   出番でないときも表示されたままになる。
+   実際、表紙と「よい旅を。」が同時に出て重なっていた。
+   出番のとき（.active）に限る、と書いておく必要がある。 */
+#story .step.active.cover, #story .step.active.end {
+  display: flex; flex-direction: column; justify-content: center; }
+#story .panel { background: rgba(251,248,242,.93); border: 1px solid var(--line);
+  border-radius: 4px; padding: 40px 34px; box-shadow: var(--shadow-l);
+  border-top: 3px solid var(--accent); }
+#story .cover h1 { font-size: 42px; margin: 0; line-height: 1.35; letter-spacing: 2px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+/* 地名が長い旅程のとき用 */
+#story .cover h1.long { font-size: 30px; letter-spacing: 1px; line-height: 1.45; }
+#story .cover p { color: var(--muted); font-size: 12px; letter-spacing: 4px; margin: 22px 0 0; }
+#story .end h2 { font-size: 24px; margin: 0;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+
+.chap { width: 100%; }
+.chap .box { background: rgba(251,248,242,.93); border: 1px solid var(--line);
+  border-radius: 4px; border-left: 3px solid var(--accent);
+  padding: 26px 28px; width: 100%; box-shadow: var(--shadow-l);
+  opacity: 0; transform: translateY(16px); transition: opacity .5s, transform .5s; }
+.chap.active .box { opacity: 1; transform: translateY(0); }
+.chap .num { font-size: 10px; letter-spacing: 3px; color: var(--accent); }
+.chap h2 { margin: 8px 0 4px; font-size: 27px; letter-spacing: 1px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.chap .dt { font-size: 11px; color: var(--muted); }
+.chap .way { font-size: 11px; color: var(--accent-d); margin-top: 8px; }
+.chap p { font-size: 13.5px; line-height: 2.1; color: #33445a; margin: 12px 0 0; white-space: pre-wrap; }
+.chap img { width: 100%; height: 200px; object-fit: cover; border-radius: 3px; margin-top: 14px; display: block; }
+.noimg { width: 100%; height: 200px; border-radius: 3px; margin-top: 14px;
+  background: repeating-linear-gradient(45deg, #f0ece2, #f0ece2 8px, #eae5d9 8px, #eae5d9 16px);
+  display: flex; align-items: center; justify-content: center; color: #a9a08e; font-size: 11px; }
+
+/* 進む・戻るの操作列 */
+#storyNav { position: absolute; left: 0; right: 0; bottom: 26px; z-index: 6;
+  display: none; justify-content: center; align-items: center; gap: 10px;
+  pointer-events: none; }
+body.mode-story #storyNav { display: flex; }
+body.playing #storyNav .step-btn { opacity: .35; }
+#storyNav > * { pointer-events: auto; }
+#storyNav button { padding: 10px 20px; font-size: 12.5px; border-radius: 4px;
+  border: 1px solid var(--line); background: rgba(251,248,242,.95); color: var(--text);
+  box-shadow: var(--shadow); }
+#storyNav button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-d); }
+#storyNav button:disabled { opacity: .35; }
+#storyNav #stepNow { font-size: 11.5px; color: var(--muted); letter-spacing: 1px;
+  background: rgba(251,248,242,.95); border: 1px solid var(--line); border-radius: 4px;
+  padding: 10px 14px; min-width: 78px; text-align: center; box-shadow: var(--shadow); }
+
+#topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 6;
+  padding: 12px 18px; display: none; justify-content: space-between; align-items: center;
+  background: linear-gradient(rgba(245,241,232,.96), rgba(245,241,232,.55) 70%, transparent); }
+body.mode-story #topbar { display: flex; }
+#topbar .ttl { font-size: 15px; font-weight: 600; letter-spacing: 2px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+#topbar .acts { display: flex; gap: 6px; align-items: stretch; }
+
+select.btn { appearance: none; -webkit-appearance: none; padding-right: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 50%, calc(100% - 9px) 50%;
+  background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
+select.btn option { background: var(--card); color: var(--text); }
+
+@media (max-width: 900px) {
+  
+  
+  
+  
+  
+  
+}
+#introSteps { display: none; padding: 14px 14px 4px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(#fdfcf8, #f7f3ea); }
+body.intro #introSteps { display: block; }
+body.intro #guide, body.intro #tripName, body.intro #listWrap,
+body.intro #tools, body.intro #adSlot, body.intro #mapEmpty { display: none; }
+body.intro #side { justify-content: flex-start; }
+body.intro #brand { padding: 26px 16px 18px; }
+body.intro #brand h1 { font-size: 38px; letter-spacing: 11px; text-indent: 11px; margin-bottom: 7px; }
+body.intro #brand p { font-size: 11px; letter-spacing: 3px; }
+body.intro #searchBox { padding: 14px 14px 0; }
+body.intro #q { padding: 12px 12px; font-size: 13px; }
+
+#introFlow { display: flex; align-items: stretch; margin: 2px 0 10px; }
+#introFlow .st { flex: 1; text-align: center; }
+#introFlow .ic { width: 34px; height: 34px; margin: 0 auto 7px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--line); color: var(--accent-d);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; }
+#introFlow .nm { font-size: 11.5px; font-weight: 600; letter-spacing: 1px; }
+#introFlow .ds { font-size: 9.5px; color: var(--muted); margin-top: 3px; line-height: 1.7; }
+#introFlow .ar { flex: none; width: 16px; color: #cfc6b4;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; padding-bottom: 26px; }
+
+#introDemo { display: block; width: 100%; height: 60px; margin-bottom: 8px; }
+/* 破線の長さは経路の実際の長さと合わせる。
+   270 のままだと、263.1 の曲線は 2.5% 手前で描き終わってしまい、
+   先頭の乗り物より線が先に着いてしまう。 */
+/* 線を引くのは一度だけ。二周目からは引かれたまま残る。
+   引く動き（3.854秒・一回きり）と、飛行機の番の入れ替え（26.4秒・くり返し）を
+   別々の動きとして重ねている。 */
+#introDemo .rt { stroke: var(--accent); stroke-width: 2.2; fill: none;
+  stroke-linecap: round; stroke-dasharray: 263.1; stroke-dashoffset: 263.1;
+  animation: introDraw 3.854s ease-in-out forwards,
+             introCurveShow 26.4s linear infinite; }
+
+/* 飛行機の番だけ、線もまっすぐになる。
+   こちらも引くのは一度だけで、飛行機が最初に来る13.2秒後から。 */
+#introDemo .rt.air { stroke-dasharray: 257.3; stroke-dashoffset: 257.3; opacity: 0;
+  animation: introDrawAir 3.854s ease-in-out 13.2s forwards,
+             introAirShow 26.4s linear infinite; }
+/* 乗り物ごとに、走っている場所を変える。
+   鉄道なら線路、車・バイク・自転車なら道路、船なら水、飛行機なら空。
+   どれも同じ曲線の上に重ねて描き、その乗り物の番のあいだだけ見せる。
+
+   出番の割り当ては乗り物と同じ 26.4秒 ÷ 6 = 16.667%ずつ:
+     0〜16.7%   新幹線   → 線路
+     16.7〜50%  車・バイク → 道路
+     50〜66.7%  飛行機   → 空（線が直線に替わる。地面は出さない）
+     66.7〜83.3% 船      → 水
+     83.3〜100% 自転車   → 道路                                        */
+#introDemo .sf { fill: none; opacity: 0;
+  animation-duration: 26.4s; animation-timing-function: linear;
+  animation-iteration-count: infinite; }
+
+/* 線が引かれきるまでは、地面も出さない。
+   引いている途中に枕木だけ先に並ぶと、順序が逆に見える。 */
+#introDemo .surfaces { opacity: 0; animation: introSurfaceIn .5s linear 3.854s forwards; }
+
+/* --- 線路 ---------------------------------------------------------------
+   下から順に、バラスト（砂利）→ 枕木 → レール。
+   レールを2本に見せるために、太い線を1本引いてから、
+   その真ん中をバラストと同じ色で細く塗りつぶしている。
+   残った両端が、2本のレールになる。                                      */
+#introDemo .sf.railBed { stroke: #cdc0a8; stroke-width: 9.5; stroke-linecap: round;
+  animation-name: introRailShow; }
+#introDemo .sf.railTie { stroke: #8a7358; stroke-width: 9; stroke-linecap: butt;
+  stroke-dasharray: 1.5 3; animation-name: introRailShow; }
+#introDemo .sf.railOut { stroke: #4f5a61; stroke-width: 5; stroke-linecap: butt;
+  animation-name: introRailShow; }
+#introDemo .sf.railIn  { stroke: #cdc0a8; stroke-width: 2.6; stroke-linecap: butt;
+  animation-name: introRailShow; }
+
+/* --- 道路 ---------------------------------------------------------------
+   外側の白線 → アスファルト → 中央線。線路と同じ重ね方。               */
+#introDemo .sf.roadEdge { stroke: #e7e2d6; stroke-width: 7.8; stroke-linecap: round;
+  animation-name: introRoadShow; }
+#introDemo .sf.roadBed  { stroke: #6f747a; stroke-width: 6.2; stroke-linecap: round;
+  animation-name: introRoadShow; }
+#introDemo .sf.roadMid  { stroke: #e5cf82; stroke-width: 0.9; stroke-linecap: butt;
+  stroke-dasharray: 4 4.5; animation-name: introRoadShow; }
+
+/* --- 海 -----------------------------------------------------------------
+   面いっぱいを青くして、小さな波をいくつも散らす。                      */
+#introDemo .sf.seaBg { fill: url(#seaGrad); fill-opacity: .62; stroke: none;
+  animation-name: introSeaShow; }
+#introDemo .sf.seaWaves { stroke: #ffffff; stroke-width: 1.1; stroke-opacity: .5;
+  stroke-linecap: round; fill: none; animation-name: introSeaShow; }
+
+/* --- 空 -----------------------------------------------------------------
+   面いっぱいを淡い青にして、雲を浮かべる。
+   雲は白いので、背景が青くないと見えない。                              */
+#introDemo .sf.skyBg { fill: url(#skyGrad); fill-opacity: .75; stroke: none;
+  animation-name: introSkyShow; }
+#introDemo .sf.cloud { fill: #ffffff; fill-opacity: .85; stroke: none;
+  animation-name: introSkyShow; }
+
+/* 飛行機の番だけ、線は飛行機雲のように細い白にする */
+#introDemo .rt.air { stroke: #ffffff; stroke-width: 1.6; stroke-opacity: .9; }
+
+#introDemo .pin { fill: var(--accent-d); }
+#introDemo .pin.b { opacity: 0; animation: introPin 26.4s ease-in-out infinite; }
+/* 乗り物が順番に線の上を走る。
+   1台の持ち時間は4.4秒。6台なので一周は26.4秒。
+   それぞれの開始を4.4秒ずつ後ろへずらして、交代で出てくるようにしている。 */
+#introDemo .tr { font-size: 26px; text-anchor: middle; dominant-baseline: central;
+  opacity: 0; offset-rotate: 0deg;
+  transform-box: fill-box; transform-origin: 50% 50%;
+  animation: introMove 26.4s ease-in-out infinite; }
+
+/* 乗り物の絵文字は、ほとんどが左を向いている。
+   線は左から右へ進むので、後ろ向きに走って見えてしまう。
+   飛行機だけは元から右上を向いているので、そのままにする。 */
+#introDemo .flip { transform: scaleX(-1); }
+/* 負の待ち時間なので、大きくずらした台ほど早く順番が回ってくる。
+   並べた順（電車→車→バイク→飛行機→船→自転車）で出るように、
+   2台目以降を後ろから割り当てている。 */
+#introDemo .v1 { animation-delay:      0s; }
+#introDemo .v2 { animation-delay: -22.0s; }
+#introDemo .v3 { animation-delay: -17.6s; }
+#introDemo .v4 { animation-delay: -13.2s; }
+#introDemo .v5 {  animation-delay: -8.8s; }
+#introDemo .v6 {  animation-delay: -4.4s; }
+/* 引く動き。先頭の電車と同じ3.854秒で、一度だけ。 */
+@keyframes introDraw    { from { stroke-dashoffset: 263.1; } to { stroke-dashoffset: 0; } }
+@keyframes introDrawAir { from { stroke-dashoffset: 257.3; } to { stroke-dashoffset: 0; } }
+
+/* 見せ方の入れ替え。飛行機の番（50%〜66.7%）だけ直線に替わる。 */
+@keyframes introCurveShow {
+  0%, 49.4%   { opacity: 1; }
+  50%, 66.4%  { opacity: 0; }
+  67%, 100%   { opacity: 1; }
+}
+@keyframes introAirShow {
+  0%, 49.4%   { opacity: 0; }
+  50%, 66.4%  { opacity: 1; }
+  67%, 100%   { opacity: 0; }
+}
+@keyframes introPin { 0%, 13% { opacity: 0; } 14.6%, 100% { opacity: 1; } }
+
+/* 地面の出し入れ。入れ替わりは 0.5%（＝約130ミリ秒）だけ重なる。
+   ちょうどその間は乗り物も消えているので、混ざったところは目に入らない。 */
+@keyframes introSurfaceIn { to { opacity: 1; } }
+@keyframes introRailShow {
+  0%, 16.2%    { opacity: 1; }
+  16.7%, 100%  { opacity: 0; }
+}
+@keyframes introRoadShow {
+  0%, 16.2%    { opacity: 0; }
+  16.7%, 49.4% { opacity: 1; }
+  50%, 82.9%   { opacity: 0; }
+  83.3%, 100%  { opacity: 1; }
+}
+@keyframes introSkyShow {
+  0%, 49.4%    { opacity: 0; }
+  50%, 66.2%   { opacity: 1; }
+  66.7%, 100%  { opacity: 0; }
+}
+@keyframes introSeaShow {
+  0%, 66.2%    { opacity: 0; }
+  66.7%, 82.9% { opacity: 1; }
+  83.3%, 100%  { opacity: 0; }
+}
+/* 26.4秒のうち、最初の1/6（＝4.4秒）が自分の出番。
+   持ち時間いっぱいを使って走り、次の1台と入れ替わる。
+   残りは線の終わりに隠れて待っている。 */
+/* 位置の区切りは 0% と 14.6% の2つだけにする。
+   途中に区切りを入れると、そこで緩急が切り替わって線とずれる。
+   薄れ方（opacity）は別の区切りで指定してよい。 */
+@keyframes introMove {
+  0%      { offset-distance: 0%;   opacity: 0; }
+  0.8%    { opacity: 1; }
+  14.6%   { offset-distance: 100%; opacity: 1; }
+  15.6%   { opacity: 0; }
+  100%    { offset-distance: 100%; opacity: 0; }
+}
+/* 動きを抑える設定の人には、走らせずに1台だけ置いておく */
+@media (prefers-reduced-motion: reduce) {
+  #introDemo .rt, #introDemo .pin.b, #introDemo .tr { animation: none; }
+  #introDemo .rt { stroke-dashoffset: 0; }
+  #introDemo .rt.air { display: none; }
+  #introDemo .pin.b { opacity: 1; }
+  #introDemo .v1 { opacity: 1; offset-distance: 52%; }
+  /* 止まっているのは新幹線なので、地面は線路だけ出す */
+  #introDemo .surfaces { animation: none; opacity: 1; }
+  #introDemo .sf { animation: none; opacity: 0; }
+  #introDemo .sf.railBed, #introDemo .sf.railTie,
+  #introDemo .sf.railOut, #introDemo .sf.railIn { opacity: 1; }
+}
+#introSteps .opener.primary { background: var(--accent); border-color: var(--accent);
+  color: #fff; font-weight: 700; padding: 10px; font-size: 12px; }
+#introSteps .opener.primary:hover { background: var(--accent-d); border-color: var(--accent-d);
+  color: #fff; }
+#introSteps .opener:disabled { opacity: .5; }
+
+#introSteps .opener { width: 100%; padding: 8px; font-size: 11px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 3px; color: var(--text); margin-top: 2px; }
+#introSteps .opener:hover { border-color: var(--accent); color: var(--accent-d); }
+#introSteps .note { font-size: 10px; color: #9aa5ae; line-height: 1.85; padding: 10px 2px 6px; }
+
+#introCard { position: fixed; right: 4vw; bottom: 4vh; z-index: 61;
+  width: clamp(220px, 22vw, 360px); opacity: 0; pointer-events: none;
+  transform: translateY(16px) scale(.97);
+  transition: opacity .9s ease, transform .9s ease; }
+#introCard.on { opacity: 1; transform: translateY(0) scale(1); }
+#introCard .frame { background: rgba(245,241,232,.95); padding: 9px;
+  border: 1px solid rgba(255,255,255,.5); border-radius: 2px;
+  box-shadow: 0 18px 50px rgba(6,12,18,.6); }
+#introCard img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 1px; }
+#introCard .dt { font-size: 10px; letter-spacing: 2px; color: var(--muted);
+  padding: 10px 2px 0; text-align: center; }
+#introCard .nm { margin-top: 4px; font-size: 17px; letter-spacing: 5px; color: var(--text);
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; text-align: center; }
+#introCard .tx { margin-top: 8px; padding: 0 4px 2px; font-size: 11.5px; line-height: 1.95;
+  color: #33445a; }
+#introCard .wy { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(27,42,65,.12);
+  font-size: 10px; letter-spacing: 1px; color: var(--accent-d); text-align: center; }
+@media (max-width: 900px) {
+  #introCard { width: clamp(150px, 34vw, 220px); right: 3vw; bottom: auto; top: 3vh; }
+  #introCard .nm { font-size: 12.5px; letter-spacing: 2px; }
+}
+
+#prep { position: fixed; inset: 0; z-index: 55; background: rgba(245,241,232,.97);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 24px; }
+body.prepping #prep { display: flex; }
+#prep .st { font-size: 14px; margin-bottom: 18px; letter-spacing: 1px; }
+#prep .bar { width: 270px; height: 3px; background: var(--line2); border-radius: 3px; overflow: hidden; }
+#prep .bar i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width .3s; }
+#prep .cnt { margin-top: 9px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#prep .skip { margin-top: 28px; background: var(--card); border: 1px solid var(--line);
+  color: var(--muted); font-size: 11px; padding: 8px 18px; border-radius: 4px; }
+#prep .note { margin-top: 22px; font-size: 10.5px; color: #9aa5ae; line-height: 1.95; }
+
+#adSlot { padding: 10px 11px 0; }
+#adSlot .lbl { font-size: 9.5px; color: #a8b3bd; letter-spacing: 2px; margin-bottom: 4px; }
+#adSlot .box { border: 1px dashed var(--line); border-radius: 4px; background: #fdfcf8;
+  height: 160px; display: flex; align-items: center; justify-content: center;
+  text-align: center; font-size: 11px; color: #a8b3bd; line-height: 1.9; }
+#adSlot .box span { font-size: 10px; color: #c2cad1; }
+#adSlot .note { font-size: 9.5px; color: #a8b3bd; margin-top: 4px; }
+/* 地図が出せないときの案内。
+   地図はよそから借りているので、こちらに非が無くても出ない日がある。
+   何も出ないと「壊れたサイト」に見えるので、そうならないようにする。 */
+#mapFail { position: fixed; inset: 0; z-index: 90; display: none;
+  align-items: center; justify-content: center; background: var(--bg); padding: 24px; }
+body.map-failed #mapFail { display: flex; }
+#mapFail .panel { background: var(--panel); border: 1px solid var(--line);
+  border-top: 3px solid var(--accent); border-radius: 4px; padding: 34px 32px;
+  max-width: 460px; box-shadow: var(--shadow); text-align: left; }
+#mapFail b { display: block; font-size: 17px; margin-bottom: 14px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+#mapFail p { margin: 0 0 20px; font-size: 13px; line-height: 1.95; color: var(--muted); }
+#mapFail button { padding: 9px 22px; font-size: 12px; background: var(--accent);
+  color: #fff; border: 0; border-radius: 3px; cursor: pointer; }
+#mapFail button:hover { background: var(--accent-d); }
+
+body.no-ads #adSlot { display: none; }
+.linkish { background: none; border: none; padding: 0; font-size: 9.5px;
+  color: var(--accent); text-decoration: underline; }
+
+.affRow { margin-bottom: 7px; }
+a.aff { display: block; text-decoration: none; font-size: 11.5px;
+  background: #f0f6f8; border: 1px solid #cfe0e6; border-radius: 4px;
+  padding: 9px 11px; color: var(--accent-d); }
+a.aff:hover { background: #e5f0f4; border-color: var(--accent); }
+a.aff .pr { font-size: 9px; background: var(--muted); color: #fff;
+  padding: 1px 5px; border-radius: 3px; margin-right: 7px; vertical-align: 1px; }
+.chap a.aff { margin-top: 14px; background: rgba(240,246,248,.8); }
+body.playing .aff { display: none; }
+body.no-aff .aff { display: none; }
+
+#consent { position: fixed; left: 0; right: 0; bottom: 0; z-index: 65;
+  background: var(--text); color: #eef2f5; padding: 16px 20px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,.25); display: none; }
+body.need-consent #consent { display: block; }
+#consent .inner { max-width: 900px; margin: 0 auto;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+#consent .txt { flex: 1; min-width: 260px; }
+#consent b { font-size: 12.5px; display: block; margin-bottom: 5px; }
+#consent p { margin: 0; font-size: 11px; line-height: 1.85; color: #b9c4cf; }
+#consent a { color: #9fd3e3; }
+#consent .acts { display: flex; gap: 8px; }
+#consent button { padding: 10px 18px; font-size: 12px; border-radius: 4px; border: 1px solid #4a5a6e;
+  background: transparent; color: #eef2f5; white-space: nowrap; }
+#consent button.ok { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+#odptPanel { position: fixed; inset: 0; z-index: 66; background: rgba(27,42,65,.45);
+  display: none; align-items: center; justify-content: center; padding: 24px; }
+body.odpt-open #odptPanel { display: flex; }
+#odptPanel .inner { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; width: 100%; max-width: 720px; max-height: 80vh;
+  display: flex; flex-direction: column; box-shadow: var(--shadow-l); }
+#odptPanel .head { display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); }
+#odptPanel .head b { font-size: 13px; letter-spacing: 1px; }
+#odptPanel .head button { padding: 5px 14px; font-size: 11px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 3px; color: var(--text); }
+#odptPanel .body { padding: 16px 18px; overflow-y: auto; font-size: 12px; line-height: 1.9; }
+#odptPanel .step { display: flex; gap: 9px; padding: 5px 0; align-items: baseline; }
+#odptPanel .mark { flex: none; width: 18px; font-weight: 700; }
+#odptPanel .ok .mark { color: var(--ok); }
+#odptPanel .ng .mark { color: #c92a2a; }
+#odptPanel .wait .mark { color: var(--muted); }
+#odptPanel code { background: #eef2f4; padding: 1px 5px; border-radius: 3px;
+  font-size: 11px; word-break: break-all; }
+#odptPanel .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); }
+
+.lineItem .src { font-size: 8.5px; padding: 1px 5px; border-radius: 2px;
+  margin-right: 7px; color: #fff; background: var(--muted); }
+.lineItem .src.ksj { background: var(--accent-d); }
+.lineItem.on .src { background: rgba(255,255,255,.3); }
+
+#toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: #fbf8f2; padding: 11px 22px; border-radius: 4px;
+  font-size: 12.5px; z-index: 70; opacity: 0; transition: opacity .3s;
+  pointer-events: none; box-shadow: var(--shadow-l); }
+#toast.on { opacity: 1; }
+</style>
+</head>
+<body class="mode-edit">
+
+<div id="app">
+
+  <div id="side">
+    <div id="brand">
+      <h1>旅情</h1>
+      <p>旅の体験を、動く物語に</p>
+      <input id="tripName" type="text" placeholder="旅の名前（例：夏の東北ひとり旅）">
+    </div>
+
+    <div id="introSteps">
+      <div id="introFlow">
+        <div class="st">
+          <div class="ic">🔍</div>
+          <div class="nm">探す</div>
+          <div class="ds">駅名や地名で<br>訪れた順に</div>
+        </div>
+        <div class="ar">&rsaquo;</div>
+        <div class="st">
+          <div class="ic">🛤️</div>
+          <div class="nm">つなぐ</div>
+          <div class="ds">線路や道を<br>たどって結ぶ</div>
+        </div>
+        <div class="ar">&rsaquo;</div>
+        <div class="st">
+          <div class="ic">▶</div>
+          <div class="nm">見る</div>
+          <div class="ds">経路をたどって<br>地図が動く</div>
+        </div>
+      </div>
+
+      <svg id="introDemo" viewBox="0 0 300 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#eaf5fb" />
+            <stop offset="100%" stop-color="#93c8e0" />
+          </linearGradient>
+          <linearGradient id="seaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#9ad6ea" />
+            <stop offset="100%" stop-color="#1f6d92" />
+          </linearGradient>
+        </defs>
+
+        <!-- 空と海は、線路や道路と違って「面」にする。
+             陸は決まった道をたどるが、空と海は広がりの中を進むため。 -->
+        <g class="surfaces">
+          <rect class="sf skyBg" x="2" y="2" width="296" height="60" rx="10" />
+          <ellipse class="sf cloud" cx="66" cy="15" rx="9" ry="3.6" />
+          <ellipse class="sf cloud" cx="74" cy="17" rx="6" ry="2.6" />
+          <ellipse class="sf cloud" cx="150" cy="10" rx="7" ry="2.8" />
+          <ellipse class="sf cloud" cx="238" cy="48" rx="8" ry="3.2" />
+          <ellipse class="sf cloud" cx="231" cy="49" rx="5" ry="2.2" />
+
+          <rect class="sf seaBg" x="2" y="2" width="296" height="60" rx="10" />
+          <path class="sf seaWaves" d="
+            M26 17 q3 -2.4 6 0 q3 2.4 6 0   M58 32 q3 -2.4 6 0 q3 2.4 6 0
+            M92 13 q3 -2.4 6 0 q3 2.4 6 0   M120 41 q3 -2.4 6 0 q3 2.4 6 0
+            M152 27 q3 -2.4 6 0 q3 2.4 6 0  M186 11 q3 -2.4 6 0 q3 2.4 6 0
+            M210 38 q3 -2.4 6 0 q3 2.4 6 0  M244 24 q3 -2.4 6 0 q3 2.4 6 0
+            M268 46 q3 -2.4 6 0 q3 2.4 6 0  M40 50 q3 -2.4 6 0 q3 2.4 6 0
+            M166 52 q3 -2.4 6 0 q3 2.4 6 0" />
+        </g>
+
+        <path class="rt" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+
+        <!-- 線路と道路は、細い線を覆い隠すように上へ重ねる -->
+        <g class="surfaces">
+          <path class="sf railBed" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+          <path class="sf railTie" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+          <path class="sf railOut" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+          <path class="sf railIn" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+
+          <path class="sf roadEdge" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+          <path class="sf roadBed" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+          <path class="sf roadMid" d="M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20" />
+        </g>
+
+        <path class="rt air" d="M22 46 L 278 20" />
+        <circle class="pin" cx="22" cy="46" r="4" />
+        <circle class="pin b" cx="278" cy="20" r="4" />
+        <text class="tr v1 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚅</text>
+        <text class="tr v2 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚗</text>
+        <text class="tr v3 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🏍️</text>
+        <text class="tr v4" style="offset-path: path('M22 46 L 278 20')">✈️</text>
+        <text class="tr v5 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚢</text>
+        <text class="tr v6 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚲</text>
+      </svg>
+
+      <div class="note">いま地図に流れているのは、札幌から那覇まで日本を縦断した9日間の記録です。
+        鉄道・フェリー・バス・車・飛行機を乗り継いでいます。鉄道は実際の線路を、
+        車は実際の道路を、船は実際の定期航路をたどり、飛行機は地球の丸みに沿った
+        最短の経路を通ります。<br><br>
+        入力した内容はこのブラウザの中だけで扱われ、どこにも送信されません。</div>
+    </div>
+
+    <div id="guide">
+      <div class="steps">
+        <div class="st" data-s="0"></div>
+        <div class="st" data-s="1"></div>
+        <div class="st" data-s="2"></div>
+      </div>
+      <div class="msg"></div>
+      <div class="sub"></div>
+    </div>
+
+    <div id="searchBox">
+      <input id="q" type="text" placeholder="場所を検索（例：東京駅）" autocomplete="off">
+      <div id="qState"></div>
+      <div id="qResults"></div>
+    </div>
+
+    <div id="listWrap">
+      <div id="list"></div>
+      <div id="empty">まだ何も追加されていません<br>上の検索欄から、旅の出発地を探してください</div>
+    </div>
+
+    <div id="adSlot">
+      <div class="lbl">広告</div>
+      <div class="box" id="adBox">
+        ここに広告が入ります<br><span>300 × 250</span>
+      </div>
+      <div class="note">
+        ストーリー再生中は表示されません ・
+        <button id="adPref" class="linkish">広告について</button>
+      </div>
+    </div>
+
+    <div id="tools">
+      <button class="btn" id="addBtn">＋ 地図をクリックして追加</button>
+      <button class="btn primary" id="storyBtn" disabled>▶ ストーリーを見る</button>
+      <div class="grid2">
+        <button class="btn sm" id="shareBtn">共有リンク</button>
+        <button class="btn sm" id="saveBtn">JSON保存</button>
+      </div>
+      <div class="grid2">
+        <button class="btn sm" id="loadBtn">JSON読込</button>
+        <button class="btn sm" id="clearBtn">全部消す</button>
+      </div>
+      <div class="grid2">
+        <button class="btn sm" id="odptBtn">鉄道データ確認</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div id="hint">地図をクリックしてください（Escで中止）</div>
+
+    <div id="mapEmpty">
+      <div>まだ場所がありません<br>左の検索欄で駅や地名を探すと、ここにピンが立ちます</div>
+    </div>
+
+    <div id="topbar">
+      <div class="ttl"></div>
+      <div class="acts">
+        <select id="baseStyle" class="btn sm" title="地図の見た目">
+          <option value="sat">航空写真</option>
+          <option value="std">Standard(3D)</option>
+        </select>
+        <button class="btn sm" id="playBtn">▶ 自動再生</button>
+        <button class="btn sm" id="editBtn">← 編集に戻る</button>
+      </div>
+    </div>
+
+    <div id="photo">
+      <div class="frame">
+        <img alt="">
+        <div class="cap">
+          <b class="nm"></b><span class="dt"></span><span class="src"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="story"><div class="inner" id="storyInner"></div></div>
+
+    <div id="storyNav">
+      <button class="step-btn" id="prevBtn">◀ 戻る</button>
+      <span id="stepNow"></span>
+      <button class="step-btn" id="nextBtn">進む ▶</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="introCard">
+  <div class="frame">
+    <img alt="">
+    <div class="dt"></div>
+    <div class="nm"></div>
+    <div class="tx"></div>
+    <div class="wy"></div>
+  </div>
+</div>
+
+<div id="prep">
+  <div class="st">準備しています</div>
+  <div class="bar"><i></i></div>
+  <div class="cnt"></div>
+  <button class="skip" id="skipBtn">読み込みをスキップ</button>
+  <div class="note">
+    旅程の上を通る地図を先に読み込んでいます。<br>
+    ここで待つことで、再生中に読み込み待ちが起きなくなります。
+  </div>
+</div>
+
+<div id="consent">
+  <div class="inner">
+    <div class="txt">
+      <b>Cookieと広告について</b>
+      <p>
+        「すべて許可」を選ぶと、興味に合わせた広告（パーソナライズ広告）が表示されます。
+        「必要なものだけ」でも、ページの内容に合わせた広告は表示されます。
+        入力した旅の記録はブラウザの中だけで扱われ、どこにも送信されません。
+        <a href="#" onclick="return false;">プライバシーポリシー</a>
+      </p>
+    </div>
+    <div class="acts">
+      <button id="cNec">必要なものだけ</button>
+      <button id="cAll" class="ok">すべて許可</button>
+    </div>
+  </div>
+</div>
+
+<div id="odptPanel">
+  <div class="inner">
+    <div class="head">
+      <b>鉄道データの確認</b>
+      <button id="odptClose">閉じる</button>
+    </div>
+    <div class="body" id="odptOut"></div>
+  </div>
+</div>
+
+<div id="mapFail">
+  <div class="panel">
+    <b class="ttl"></b>
+    <p class="msg"></p>
+    <button id="mapFailRetry">読み込み直す</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="jsonFile" accept="application/json" style="display:none">
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+
+const MODES = {
+  rail: { label: '鉄道（直線）', ico: '🚆', api: null, shape: 'straight',
+    travel: { zoom: 7.6, pitch: 42, ms: 7000, min: 4500, max: 9000, samples: 3, look: 0.10 } },
+
+  railTrack: { label: '鉄道（線路に沿う）', ico: '🛤️', api: null, shape: 'track',
+    travel: { zoom: 8.4, pitch: 48, ms: 14000, min: 7000, max: 16000, samples: 5, look: 0.09 } },
+
+  /* バスは道路を走る。以前は直線で結んでいたが、それでは山も海も突っ切ってしまう。
+     バス専用の経路案内は無いので、車と同じ道路の経路をたどる。 */
+  transit: { label: 'バス', ico: '🚌', api: 'driving',
+    travel: { zoom: 9.6, pitch: 52, ms: 5600, min: 3400, max: 7000, samples: 3, look: 0.10 } },
+
+  driving: { label: '車', ico: '🚗', api: 'driving',
+    travel: { zoom: 11.2, pitch: 60, ms: 15000, min: 6000, max: 16000, samples: 6, look: 0.12 } },
+
+  walking: { label: '徒歩', ico: '🚶', api: 'walking',
+    travel: { zoom: 14.8, pitch: 64, ms: 90000, min: 5000, max: 13000, samples: 6, look: 0.10 } },
+
+  cycling: { label: '自転車', ico: '🚴', api: 'cycling',
+    travel: { zoom: 13.2, pitch: 62, ms: 34000, min: 5500, max: 14000, samples: 6, look: 0.11 } },
+
+  ferry: { label: 'フェリー', ico: '🚢', api: null, shape: 'sea', bend: 0.03,
+    travel: { zoom: 6.4, pitch: 36, ms: 5600, min: 5000, max: 11000, samples: 3, look: 0.14 } },
+
+  flight: { label: '飛行機', ico: '✈️', api: null, shape: 'air',
+    travel: { zoom: 5.4, pitch: 34, ms: 5200, min: 5000, max: 10000, samples: 3, look: 0.15 } }
+};
+
+const JAPAN_CENTER = [138.2, 37.0];
+const JAPAN_ZOOM = 4.6;
+
+let spots = [];
+let tripName = '';
+let selectedId = null;
+let markers = [], viaMarkers = [];
+let legs = [];
+let armed = false;
+let armedVia = null;
+let playing = false;
+let uid = 1;
+let booted = false;
+let hasPlayed = false;
+
+const $ = function (s) { return document.querySelector(s); };
+const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+function viaList(s) {
+  return (s.via || []).map(function (v) {
+    return Array.isArray(v) ? { c: v, n: '' } : v;
+  });
+}
+
+function viaCoords(s) {
+  return viaList(s).map(function (v) { return v.c; });
+}
+
+function isRail(mode) { return mode === 'rail' || mode === 'railTrack'; }
+
+function stationRole(i) { return i === 0 ? '乗車駅' : '乗換駅'; }
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const STYLES = {
+  sat: 'mapbox://styles/mapbox/satellite-streets-v12',
+  std: 'mapbox://styles/mapbox/standard'
+};
+let baseStyle = 'sat';
+
+const STOP_ZOOM = 15.2;
+const STOP_PITCH = 64;
+const TRAVEL_ZOOM = 8.6;
+const TRAVEL_PITCH = 48;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: STYLES[baseStyle],
+  center: JAPAN_CENTER,
+  zoom: JAPAN_ZOOM,
+  pitch: 0,
+  antialias: false,
+  language: 'ja',
+  renderWorldCopies: false,
+  refreshExpiredTiles: false,
+
+  // タイルを何枚まで手元に置いておくか。
+  //
+  // 512×512のタイルは、圧縮された状態では54KBでも、
+  // 画面に出すために展開すると1枚あたり1MBになる。
+  // 以前は1500枚に設定していて、それだけで1.5GBを占めていた。
+  //
+  // いまは移動が遅く、動き出す前にタイルを待つので、
+  // 大量に抱えておく必要がない。
+  // 60枚まで絞ったが、削りすぎると同じタイルを何度も取り直すことになり、
+  // かえって読み込みが遅く見える。120枚（約120MB相当）で折り合いをつける。
+  maxTileCacheSize: 120
+});
+
+map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+/* 出典は地図の帰属表示に常時出す。
+   ・鉄道（国土数値情報）: 出典の明記が利用条件
+   ・航路（OpenStreetMap）: 出典の明記に加えて、
+     加工して作った data/ferry/ も同じ ODbL で提供する必要がある。
+     ページそのものが ODbL になるわけではない。
+   ・空港（OurAirports）: パブリックドメインなので条件としての義務は無いが、
+     先方が謝意を求めているので出す。 */
+map.addControl(new mapboxgl.AttributionControl({
+  compact: true,
+  customAttribution: '鉄道: <b>国土数値情報（鉄道データ）国土交通省</b>' +
+                     ' ・ 航路: <b>© OpenStreetMap contributors</b>' +
+                     ' ・ 空港: <b>OurAirports</b>'
+}));
+
+/* ---------------------------------------------------------------------------
+   地図が出せないときの案内
+
+   地図はMapboxから借りている。無料で使える量には上限があり、
+   使い切ると地図が出なくなる。回線の具合で出ないこともある。
+
+   何も手当てをしないと画面が真っ白になり、利用者には「壊れたサイト」に見える。
+   実際には一時的なことなので、そう伝わるようにしておく。
+   --------------------------------------------------------------------------- */
+
+let mapFailShown = false;
+
+function showMapFail(kind) {
+  if (mapFailShown) return;
+  mapFailShown = true;
+
+  const t = $('#mapFail .ttl'), m = $('#mapFail .msg');
+  if (kind === 'limit') {
+    t.textContent = 'いま地図を表示できません';
+    m.textContent = '地図の利用が今月の上限に達したか、一時的に制限されています。' +
+      '時間をおいてからお試しください。ご不便をおかけします。';
+  } else {
+    t.textContent = '地図を読み込めませんでした';
+    m.textContent = '通信の状態が悪いか、地図の配信が一時的に止まっているようです。' +
+      '少し待ってから読み込み直してみてください。';
+  }
+  document.body.classList.add('map-failed');
+}
+
+map.on('error', function (e) {
+  const st = e && e.error && e.error.status;
+  // 401=鍵の問題 402/429=使いすぎ 403=許可されていない場所からの利用
+  if (st === 401 || st === 402 || st === 403 || st === 429) showMapFail('limit');
+});
+
+/* 上のどれにも当てはまらないまま、いつまでも地図が出てこない場合。
+   boot() は地図の下地が整ったときに動くので、それが来ないなら何かおかしい。 */
+setTimeout(function () { if (!booted) showMapFail('net'); }, 20000);
+
+function isStandard() { return baseStyle === 'std'; }
+
+map.on('style.load', function () {
+  if (isStandard()) {
+    map.setConfigProperty('basemap', 'lightPreset', 'dusk');
+    map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
+  }
+
+  if (!map.getSource('mapbox-dem')) {
+    map.addSource('mapbox-dem', {
+      type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      tileSize: 512, maxzoom: 14
+    });
+  }
+  map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.15 });
+
+  if (!map.getLayer('sky')) {
+    map.addLayer({ id: 'sky', type: 'sky',
+      paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun-intensity': 8 } });
+  }
+
+  addRouteLayers();
+
+  roadSaved = null;
+  if (introOn) muteRoads(true);
+
+  if (!booted) { booted = true; boot(); }
+  else { drawRoute(routeUpTo(spots.length - 1)); renderMarkers(); }
+});
+
+function addRouteLayers() {
+  if (!map.getSource('route')) {
+    map.addSource('route', {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+    });
+  }
+  const slot = isStandard() ? 'middle' : undefined;
+
+  const defs = [
+    { id: 'route-glow', width: ['interpolate', ['linear'], ['zoom'], 4, 7, 12, 16],
+      color: '#7fd3e8', opacity: 0.26, blur: 1.5 },
+    { id: 'route-line', width: ['interpolate', ['linear'], ['zoom'], 4, 2.2, 12, 4.5],
+      color: '#f5f1e8', opacity: 0.97, blur: 0 }
+  ];
+
+  defs.forEach(function (d) {
+    if (map.getLayer(d.id)) return;
+    const layer = {
+      id: d.id, type: 'line', source: 'route',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': d.color, 'line-width': d.width,
+               'line-opacity': d.opacity, 'line-blur': d.blur }
+    };
+    if (slot) layer.slot = slot;
+    map.addLayer(layer);
+  });
+}
+
+function drawRoute(coords) {
+  const src = map.getSource('route');
+  if (!src) return;
+  src.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords || [] } });
+}
+
+function camFor(i) {
+  return {
+    center: spots[i].coord, zoom: STOP_ZOOM, pitch: STOP_PITCH,
+    bearing: NORTH_UP ? 0 : (i * 41) % 360
+  };
+}
+
+function travelFor(i) {
+  const next = spots[i + 1];
+  const conf = (next && MODES[next.mode]) ? MODES[next.mode] : MODES.rail;
+  return conf.travel;
+}
+
+function travelDuration(i) {
+  const t = travelFor(i);
+  const leg = legs[i];
+  if (!leg || !leg.length) return t.min;
+
+  // 北を上に固定しているときは、流れる速さが揃うように時間を決める
+  if (NORTH_UP) return glideDuration(leg, t, t.min, t.max);
+
+  const len = cumulative(leg)[leg.length - 1];
+  return Math.max(t.min, Math.min(t.max, t.ms * len));
+}
+
+function dist(a, b) {
+  const k = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
+  const dx = (b[0] - a[0]) * k, dy = b[1] - a[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function bearingOf(a, b) {
+  const k = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
+  return (Math.atan2((b[0] - a[0]) * k, b[1] - a[1]) * 180 / Math.PI + 360) % 360;
+}
+
+function crValue(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * ((2 * p1) + (-p0 + p2) * t +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+
+function smoothThrough(points, perSeg) {
+  if (points.length < 2) return points.slice();
+  const n = perSeg || 22;
+  const P = [points[0]].concat(points, [points[points.length - 1]]);
+  const out = [];
+  for (let i = 0; i + 3 < P.length; i++) {
+    for (let j = 0; j < n; j++) {
+      const t = j / n;
+      out.push([
+        crValue(P[i][0], P[i + 1][0], P[i + 2][0], P[i + 3][0], t),
+        crValue(P[i][1], P[i + 1][1], P[i + 2][1], P[i + 3][1], t)
+      ]);
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function bendMid(a, b, frac) {
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  return [mx - dy * frac, my + dx * frac];
+}
+
+/* 飛行機の経路。地球は丸いので、球の上を通る最短の線を引く。
+
+   平面の地図の上でただ曲げると、実際とはまるで違う線になる。
+   東京からロンドンへの便は北のシベリア上空を通るのだが、
+   以前のやり方（bendMid で横にずらす）だと南のインド洋の方へ曲がっていた。
+   中間点で5,000km以上ずれていたので、見た目の好みではなく誤りだった。
+
+   球の上の2点を、球の上のまま少しずつ進める（球面線形補間）。 */
+function greatCircle(a, b, n) {
+  const steps = n || 128;
+  const rad = Math.PI / 180, deg = 180 / Math.PI;
+
+  const toXYZ = function (p) {
+    const lo = p[0] * rad, la = p[1] * rad;
+    return [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)];
+  };
+
+  const p = toXYZ(a), q = toXYZ(b);
+  let dot = p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+  dot = Math.max(-1, Math.min(1, dot));
+  const om = Math.acos(dot);          // 2点のあいだの角度
+
+  const out = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    let x, y, z;
+
+    // ほぼ同じ点なら、割り算が壊れるので普通に混ぜる
+    if (om < 1e-8) {
+      x = p[0] + (q[0] - p[0]) * t;
+      y = p[1] + (q[1] - p[1]) * t;
+      z = p[2] + (q[2] - p[2]) * t;
+    } else {
+      const s = Math.sin(om);
+      const wa = Math.sin((1 - t) * om) / s;
+      const wb = Math.sin(t * om) / s;
+      x = p[0] * wa + q[0] * wb;
+      y = p[1] * wa + q[1] * wb;
+      z = p[2] * wa + q[2] * wb;
+    }
+
+    const h = Math.sqrt(x * x + y * y);
+    out.push([Math.atan2(y, x) * deg, Math.atan2(z, h) * deg]);
+  }
+
+  /* 経度が180度をまたぐと、地図の反対の端まで線が飛んでしまう。
+     ひとつ前の点から見て近いほうの値に直しておく。 */
+  for (let i = 1; i < out.length; i++) {
+    while (out[i][0] - out[i - 1][0] > 180) out[i][0] -= 360;
+    while (out[i][0] - out[i - 1][0] < -180) out[i][0] += 360;
+  }
+
+  return out;
+}
+
+// 経由地がある場合は、区間ごとに大圏航路をつないでいく
+function greatCircleThrough(points) {
+  let out = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const seg = greatCircle(points[i], points[i + 1]);
+    out = out.concat(i === 0 ? seg : seg.slice(1));
+  }
+
+  /* 区間ごとの経度のつなぎ直しは、その区間の中でしか効かない。
+     区間をつなげた継ぎ目で経度が360度ずれたままになり、
+     東京からホノルルの線が地球を一周してしまっていた。
+     全体をもう一度ならしておく。 */
+  for (let i = 1; i < out.length; i++) {
+    while (out[i][0] - out[i - 1][0] > 180) out[i][0] -= 360;
+    while (out[i][0] - out[i - 1][0] < -180) out[i][0] += 360;
+  }
+
+  return out;
+}
+
+/* ---------------------------------------------------------------------------
+   空港
+
+   飛行機の区間を街の中心どうしで結ぶと、東京駅から飛び立って
+   首里城に着陸することになる。実際には羽田から那覇空港へ飛ぶ。
+
+   空の上の航空路そのものは、無償で再配布できる世界規模のデータが
+   見つからなかった。だが両端を空港にするだけでも線は実際の形に近づく。
+   広島空港は市街地の40km東にあるので、広島を出た線はいったん東へ
+   向かってから南西へ曲がる。実際そう飛ぶ。
+
+   出典: OurAirports（パブリックドメイン）
+   --------------------------------------------------------------------------- */
+
+const AIR_DATA = 'data/air/airports.json';
+const AIRPORT_MAX = 300;      // この距離(km)より遠い空港は使わない
+const AIRPORT_MIN = 3;        // 出発地がこれ(km)より空港に近ければ、わざわざ挟まない
+const AIRPORT_SHORT = 80;     // 2地点がこれ(km)より近ければ、空港は挟まない
+const AIRPORT_DETOUR = 2.5;   // 空港を挟んだ結果、直線の何倍まで許すか
+
+/* 中くらいの空港は「60km余計に遠い」ものとして扱う。
+
+   単純に近い順で選ぶと、札幌では丘珠空港(6km)が新千歳(43km)に勝ってしまう。
+   だが札幌からの便はほとんど新千歳から出る。
+   ロンドンでも同じで、シティ空港(13km)よりヒースロー(23km)が選ばれてほしい。
+   倍率だと近すぎる空港に勝てないので、距離を足す形にしている。 */
+const AIRPORT_MEDIUM_PENALTY = 60;
+
+let airportCache = null;
+
+// 地点id → その区間で使った空港。編集画面に出すためだけのもの。
+const flightAirports = {};
+
+async function airports() {
+  if (airportCache) return airportCache;
+  const res = await fetch(AIR_DATA);
+  if (!res.ok) throw new Error('空港の一覧を読めません（' + AIR_DATA + '）');
+  const json = await res.json();
+  airportCache = json.airports || [];
+  return airportCache;
+}
+
+/* いちばん近い空港。ただし単純な距離ではなく、
+   大きい空港をやや優先する。そうしないと、
+   東京から飛ぶのに小さな飛行場が選ばれてしまう。 */
+async function nearestAirport(p) {
+  const list = await airports();
+  let best = null, bestScore = Infinity;
+
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    // まず粗くふるいにかける（度でおおよそ3度＝330km）
+    if (Math.abs(a[0] - p[0]) > 4 || Math.abs(a[1] - p[1]) > 3) continue;
+
+    const d = dist([a[0], a[1]], p) * 111;
+    if (d > AIRPORT_MAX) continue;
+
+    const score = d + (a[4] === 2 ? 0 : AIRPORT_MEDIUM_PENALTY);
+    if (score < bestScore) { bestScore = score; best = a; }
+  }
+
+  if (!best) return null;
+  return { coord: [best[0], best[1]], name: best[2], iata: best[3],
+           km: dist([best[0], best[1]], p) * 111 };
+}
+
+/* 飛行機の区間で通る点を決める。
+   出発地 →（出発する空港）→ 利用者の経由地 →（着く空港）→ 到着地 */
+async function flightPoints(a, b, via) {
+  const plain = { points: [a].concat(via, [b]), from: null, to: null };
+  const straight = dist(a, b) * 111;
+
+  // 近すぎる2地点。人はそこを飛行機で移動しないし、
+  // 挟むと空港のほうが遠くて線の形が壊れる。
+  if (straight < AIRPORT_SHORT) return plain;
+
+  let from = null, to = null;
+  try {
+    from = await nearestAirport(a);
+    to = await nearestAirport(b);
+  } catch (err) {
+    console.warn('空港の一覧を読めなかったので、地点どうしを直接つなぎます', err);
+    return plain;
+  }
+
+  // 同じ空港に着いてしまうなら、飛行機の区間として成り立たない
+  if (from && to && from.iata && from.iata === to.iata) { from = null; to = null; }
+
+  const pts = [a];
+  if (from && from.km > AIRPORT_MIN) pts.push(from.coord); else from = null;
+  via.forEach(function (v) { pts.push(v); });
+  if (to && to.km > AIRPORT_MIN) pts.push(to.coord); else to = null;
+  pts.push(b);
+
+  // 空港へ寄ったせいで極端に遠回りになるなら、寄らないほうがまし
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += dist(pts[i - 1], pts[i]) * 111;
+  if (len > straight * AIRPORT_DETOUR) return plain;
+
+  return { points: pts, from: from, to: to };
+}
+
+function densify(points, perSeg) {
+  const n = perSeg || 40;
+  const out = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    for (let j = 0; j < n; j++) {
+      const t = j / n;
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function buildLineGraph(ways) {
+  const index = new Map();
+  const pts = [];
+  const adj = [];
+
+  function idOf(lon, lat) {
+    const key = lat.toFixed(7) + ',' + lon.toFixed(7);
+    let i = index.get(key);
+    if (i === undefined) {
+      i = pts.length;
+      index.set(key, i);
+      pts.push([lon, lat]);
+      adj.push([]);
+    }
+    return i;
+  }
+
+  ways.forEach(function (w) {
+    const g = w.geometry;
+    let prev = idOf(g[0].lon, g[0].lat);
+    for (let k = 1; k < g.length; k++) {
+      const cur = idOf(g[k].lon, g[k].lat);
+      if (cur === prev) continue;
+      const cost = dist(pts[prev], pts[cur]);
+      adj[prev].push({ t: cur, w: cost });
+      adj[cur].push({ t: prev, w: cost });
+      prev = cur;
+    }
+  });
+
+  return { pts: pts, adj: adj };
+}
+
+function nearestNode(graph, coord) {
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < graph.pts.length; i++) {
+    const d = dist(graph.pts[i], coord);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return { idx: best, d: bestD };
+}
+
+function Heap() {
+  this.a = [];
+}
+Heap.prototype.push = function (item) {
+  const a = this.a;
+  a.push(item);
+  let i = a.length - 1;
+  while (i > 0) {
+    const p = (i - 1) >> 1;
+    if (a[p][0] <= a[i][0]) break;
+    const t = a[p]; a[p] = a[i]; a[i] = t;
+    i = p;
+  }
+};
+Heap.prototype.pop = function () {
+  const a = this.a;
+  const top = a[0];
+  const last = a.pop();
+  if (a.length) {
+    a[0] = last;
+    let i = 0;
+    for (;;) {
+      const l = i * 2 + 1, r = l + 1;
+      let m = i;
+      if (l < a.length && a[l][0] < a[m][0]) m = l;
+      if (r < a.length && a[r][0] < a[m][0]) m = r;
+      if (m === i) break;
+      const t = a[m]; a[m] = a[i]; a[i] = t;
+      i = m;
+    }
+  }
+  return top;
+};
+Heap.prototype.size = function () { return this.a.length; };
+
+function shortestPath(graph, start, goal) {
+  const n = graph.pts.length;
+  const best = new Float64Array(n).fill(Infinity);
+  const from = new Int32Array(n).fill(-1);
+  const done = new Uint8Array(n);
+
+  best[start] = 0;
+  const heap = new Heap();
+  heap.push([0, start]);
+
+  while (heap.size()) {
+    const cur = heap.pop();
+    const u = cur[1];
+    if (done[u]) continue;
+    done[u] = 1;
+    if (u === goal) break;
+
+    const list = graph.adj[u];
+    for (let k = 0; k < list.length; k++) {
+      const v = list[k].t;
+      if (done[v]) continue;
+      const nd = best[u] + list[k].w;
+      if (nd < best[v]) {
+        best[v] = nd;
+        from[v] = u;
+        heap.push([nd, v]);
+      }
+    }
+  }
+
+  if (best[goal] === Infinity) return null;
+
+  const path = [];
+  for (let v = goal; v !== -1; v = from[v]) path.push(graph.pts[v]);
+  path.reverse();
+  return path;
+}
+
+/* ===========================================================================
+   線路と航路をたどる
+
+   鉄道の線路は、国土数値情報（鉄道データ N02）から作った手元のデータを使う。
+
+   以前は Overpass API（OpenStreetMap の共有サーバー）に実行時に問い合わせていた。
+   90秒待たされることがあり、区間ごとに1.2秒の間隔を空ける必要もあり、
+   混雑時には失敗した。路線名も表記ゆれが多く、安定しなかった。
+
+   いまは tools/build-rail-data.js が作った data/rail/ を読む。
+   594路線・8,505駅で、路線1本あたり数KB〜72KB。鍵も待ち時間も要らない。
+
+   船の航路は、OpenStreetMap から作った data/ferry/ を読む。
+   国土数値情報 N09（定期旅客航路）も調べたが、856航路すべてが
+   港と港を結ぶ2点の直線でしかなく、航路の形を持っていなかった。
+
+   線路と航路は、出どころも中身も違うが、
+   「線の集まりの上を、駅から駅へたどる」という扱いはまったく同じ。
+   なので下の2つの箱で置き場所だけ切り替えて、同じ手続きを通す。
+   =========================================================================== */
+
+const DEG = 1 / 111000;             // おおよそ1メートルぶんの度数
+
+const RAIL = {
+  dir: 'data/rail/',
+  label: '線路',
+  near: 1500 * DEG,       // 駅がこの距離以内にある路線を候補にする
+  index: null, geo: {}, graph: {}, found: {}
+};
+
+const FERRY = {
+  dir: 'data/ferry/',
+  label: '航路',
+  near: 6000 * DEG,       // 港は広く、埠頭の位置もまちまちなので鉄道より緩くみる
+  index: null, geo: {}, graph: {}, found: {}
+};
+
+async function lineIndex(ds) {
+  if (ds.index) return ds.index;
+  const res = await fetch(ds.dir + 'index.json');
+  if (!res.ok) throw new Error('一覧を読めません（' + ds.dir + 'index.json）');
+  ds.index = await res.json();
+  return ds.index;
+}
+
+async function lineGeometry(ds, id) {
+  if (ds.geo[id]) return ds.geo[id];
+  const res = await fetch(ds.dir + 'lines/' + encodeURIComponent(id) + '.geojson');
+  if (!res.ok) throw new Error('データを読めません: ' + id);
+  ds.geo[id] = await res.json();
+  return ds.geo[id];
+}
+
+// MultiLineString を buildLineGraph が受け取る形（Overpass の way と同じ形）に直す
+function lineWays(gj) {
+  return gj.geometry.coordinates.map(function (seg) {
+    return { geometry: seg.map(function (c) { return { lon: c[0], lat: c[1] }; }) };
+  });
+}
+
+async function lineGraph(ds, id) {
+  if (ds.graph[id]) return ds.graph[id];
+  ds.graph[id] = buildLineGraph(lineWays(await lineGeometry(ds, id)));
+  return ds.graph[id];
+}
+
+function inBox(box, c, pad) {
+  return c[0] >= box[0] - pad && c[0] <= box[2] + pad &&
+         c[1] >= box[1] - pad && c[1] <= box[3] + pad;
+}
+
+function minDistToLine(gj, c) {
+  let best = Infinity;
+  const segs = gj.geometry.coordinates;
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    for (let k = 0; k < seg.length; k++) {
+      const d = dist(seg[k], c);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+// 2点の両方が近くを通る線を探す。近い順に返す。
+async function findLines(ds, a, b) {
+  const key = a.join(',') + '|' + b.join(',');
+  if (ds.found[key]) return ds.found[key];
+
+  const idx = await lineIndex(ds);
+
+  // まず外接矩形でふるいにかける。ここで数百本が数十本になる。
+  const rough = idx.lines.filter(function (l) {
+    return inBox(l.bbox, a, ds.near) && inBox(l.bbox, b, ds.near);
+  });
+
+  const hits = [];
+  for (let i = 0; i < rough.length; i++) {
+    const meta = rough[i];
+    let gj;
+    try { gj = await lineGeometry(ds, meta.id); } catch (e) { continue; }
+
+    const da = minDistToLine(gj, a);
+    if (da > ds.near) continue;
+    const db = minDistToLine(gj, b);
+    if (db > ds.near) continue;
+
+    hits.push({
+      id: meta.id,
+      name: meta.name,
+      operator: meta.operator,
+      category: meta.category,
+      operatorType: meta.operatorType,
+      score: da + db
+    });
+  }
+
+  hits.sort(function (x, y) { return x.score - y.score; });
+  ds.found[key] = hits;
+  return hits;
+}
+
+// 片方の点だけを見て、その近くを通る線を集める（乗り換えを探すときに使う）
+async function linesNear(ds, p) {
+  const key = 'near|' + p.join(',');
+  if (ds.found[key]) return ds.found[key];
+
+  const idx = await lineIndex(ds);
+  const rough = idx.lines.filter(function (l) { return inBox(l.bbox, p, ds.near); });
+
+  const hits = [];
+  for (let i = 0; i < rough.length; i++) {
+    let gj;
+    try { gj = await lineGeometry(ds, rough[i].id); } catch (e) { continue; }
+    const d = minDistToLine(gj, p);
+    if (d <= ds.near) hits.push({ id: rough[i].id, name: rough[i].name, score: d });
+  }
+
+  hits.sort(function (x, y) { return x.score - y.score; });
+  ds.found[key] = hits;
+  return hits;
+}
+
+/* 路線どうしのつながり。同じ駅に停まる路線どうしは、そこで乗り換えられる。
+
+   注意: 駅名は全国で重複する（「本町」「大手町」など）。
+   名前だけで結ぶと、遠く離れた無関係の路線がつながってしまう。
+   実際に確かめたところ、同名の組み合わせ2,487件のうち909件が別の場所の駅だった。
+   なので座標が1.5km以内にあるときだけ、乗り換えできるとみなす。 */
+const TRANSFER_NEAR = 1.5;        // km
+const TRANSFER_MAX_LINES = 4;     // 使う路線は4本まで（＝乗り換えは3回まで）
+const TRANSFER_DETOUR = 3.0;      // 直線距離の何倍までなら遠回りを許すか
+
+let railLinkCache = null;
+
+async function railLinks() {
+  if (railLinkCache) return railLinkCache;
+
+  const res = await fetch(RAIL.dir + 'stations.json');
+  if (!res.ok) throw new Error('駅の一覧を読めません（' + RAIL.dir + 'stations.json）');
+  const json = await res.json();
+
+  // 路線id → Map(相手の路線id → 乗換駅の座標の一覧)
+  const link = new Map();
+  const add = function (from, to, coord) {
+    if (!link.has(from)) link.set(from, new Map());
+    const m = link.get(from);
+    if (!m.has(to)) m.set(to, []);
+    m.get(to).push(coord);
+  };
+
+  const st = json.stations || {};
+  Object.keys(st).forEach(function (name) {
+    const es = st[name];
+    for (let i = 0; i < es.length; i++) {
+      for (let j = i + 1; j < es.length; j++) {
+        if (dist(es[i].coord, es[j].coord) * 111 > TRANSFER_NEAR) continue;
+        add(es[i].line, es[j].line, es[i].coord);
+        add(es[j].line, es[i].line, es[j].coord);
+      }
+    }
+  });
+
+  railLinkCache = link;
+  return link;
+}
+
+/* 1本の路線ではつながらない区間を、乗り換えを挟んでたどる。
+
+   たとえば名古屋から大阪へ。名古屋を通るのはJR東海の東海道線、
+   大阪を通るのはJR西日本の東海道線で、データの上では別の路線になっている。
+   両方が停まる米原で乗り換える、という道筋をここで自動的に見つける。
+
+   路線を点、乗換駅を線とみなして、乗り換えの少ない順に探す。 */
+async function railTransferSegment(a, b) {
+  const from = (await linesNear(RAIL, a)).slice(0, 6);
+  const to = (await linesNear(RAIL, b)).slice(0, 6);
+  if (!from.length || !to.length) return null;
+
+  const goal = {};
+  to.forEach(function (l) { goal[l.id] = true; });
+
+  const link = await railLinks();
+
+  // 乗り換えの少ない道筋から順に取り出す
+  const seen = {};
+  let queue = from.map(function (l) { seen[l.id] = true; return [l.id]; });
+  let paths = [];
+
+  while (queue.length && !paths.length) {
+    const next = [];
+    for (let i = 0; i < queue.length; i++) {
+      const path = queue[i];
+      const last = path[path.length - 1];
+
+      // 1本だけの道筋は、呼び出し元がすでに試して駄目だったもの
+      if (path.length > 1 && goal[last]) { paths.push(path); continue; }
+      if (path.length >= TRANSFER_MAX_LINES) continue;
+
+      const nb = link.get(last);
+      if (!nb) continue;
+      nb.forEach(function (coords, other) {
+        if (seen[other]) return;
+        seen[other] = true;
+        next.push(path.concat([other]));
+      });
+    }
+    queue = next;
+  }
+  if (!paths.length) return null;
+
+  const straight = dist(a, b);
+
+  for (let p = 0; p < Math.min(paths.length, 4); p++) {
+    const path = paths[p];
+
+    // 乗換駅を決める。候補が複数あるときは、遠回りが少なくなるものを選ぶ。
+    const points = [a];
+    let cur = a;
+    let ok = true;
+
+    for (let k = 0; k < path.length - 1; k++) {
+      const cands = link.get(path[k]).get(path[k + 1]) || [];
+      let best = null, bestScore = Infinity;
+      for (let c = 0; c < cands.length; c++) {
+        const score = dist(cur, cands[c]) + dist(cands[c], b);
+        if (score < bestScore) { bestScore = score; best = cands[c]; }
+      }
+      if (!best) { ok = false; break; }
+      points.push(best);
+      cur = best;
+    }
+    if (!ok) continue;
+    points.push(b);
+
+    // それぞれの区間を、その路線の線路の上でたどる
+    let out = [];
+    for (let k = 0; k < points.length - 1; k++) {
+      const seg = await segmentOn(RAIL, path[k], points[k], points[k + 1]);
+      if (!seg || seg.length < 2) { out = null; break; }
+      out = out.concat(k === 0 ? seg : seg.slice(1));
+    }
+    if (!out) continue;
+
+    // 見つかっても、極端な遠回りなら採用しない
+    let len = 0;
+    for (let i = 1; i < out.length; i++) len += dist(out[i - 1], out[i]);
+    if (straight > 0 && len > straight * TRANSFER_DETOUR) continue;
+
+    console.info('乗り換えでつなぎました: ' + path.join(' → '));
+    return out;
+  }
+
+  return null;
+}
+
+async function segmentOn(ds, id, a, b) {
+  const g = await lineGraph(ds, id);
+  const na = nearestNode(g, a);
+  const nb = nearestNode(g, b);
+  if (na.idx < 0 || nb.idx < 0) return null;
+  return shortestPath(g, na.idx, nb.idx);
+}
+
+async function trackSegment(ds, a, b, line) {
+  // 線が選ばれていれば、その上だけをたどる
+  if (line && line.id) {
+    const seg = await segmentOn(ds, line.id, a, b);
+    if (seg) return seg;
+  }
+
+  // 選ばれていなければ、近いものから順に試す
+  const cand = await findLines(ds, a, b);
+  for (let i = 0; i < Math.min(cand.length, 4); i++) {
+    const seg = await segmentOn(ds, cand[i].id, a, b);
+    if (seg) return seg;
+  }
+
+  /* 1本でつながらないときは、乗り換えを挟んで探す。
+     鉄道だけの仕組み。船には駅にあたるものが無い。 */
+  if (ds === RAIL) {
+    const seg = await railTransferSegment(a, b);
+    if (seg) return seg;
+  }
+
+  if (!cand.length) throw new Error('この区間を通る' + ds.label + 'が見つかりません（乗り換えも探しましたが届きませんでした）');
+  throw new Error(ds.label + 'がつながっていません（分断されているかもしれません）');
+}
+
+async function trackLeg(ds, points, lines) {
+  let out = [points[0]];
+  let failed = 0;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    try {
+      out = out.concat(await trackSegment(ds, a, b, lines ? lines[i] : null));
+    } catch (err) {
+
+      console.warn('区間 ' + (i + 1) + ' の' + ds.label + 'をたどれませんでした', err);
+      failed++;
+      out = out.concat(densify([a, b]));
+    }
+
+    // Overpass に問い合わせていたころは、区間ごとに間隔を空ける必要があった。
+    // 手元のデータになったので待つ理由がない。
+  }
+
+  out.push(points[points.length - 1]);
+  if (failed === points.length - 1) throw new Error('すべての区間で' + ds.label + 'が見つかりません');
+  // はじめの画面が流れている間は、利用者への通知を出さない
+  if (failed > 0 && !introOn) toast(failed + 'つの区間は' + ds.label + 'が見つからず直線にしました');
+  return out;
+}
+
+/* 船の区間。
+
+   陸を横切らせないことが何より大事なので、鉄道とは失敗したときの扱いを変える。
+   鉄道は見つからなければ直線でつないでよい。線路が無くても陸の上だからである。
+   船で同じことをすると、船が陸を走る。
+
+   航路が見つからなかった場合は、ゆるい弧でつなぐが、
+   それは正しい航路ではないと利用者にはっきり伝える。
+   経由地を海の上に置いてもらえば、そこを通るようになる。 */
+async function seaLeg(points) {
+  let out = [points[0]];
+  let missed = 0;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    try {
+      out = out.concat(await trackSegment(FERRY, a, b, null));
+    } catch (err) {
+      console.warn('区間 ' + (i + 1) + ' の航路が見つかりませんでした', err);
+      missed++;
+      out = out.concat(smoothThrough([a, bendMid(a, b, MODES.ferry.bend), b]));
+    }
+  }
+
+  out.push(points[points.length - 1]);
+
+  if (missed > 0 && !introOn) {
+    toast(points.length - 1 === missed
+      ? '航路データにない区間です。海の上に経由地を置くと、そこを通せます'
+      : missed + 'つの区間は航路が見つかりませんでした。経由地を置くと直せます');
+  }
+  return out;
+}
+
+const legCache = {};
+// 経路と同じ鍵で、その区間に使った空港も覚えておく
+const legAir = {};
+
+async function fetchRoad(profile, points) {
+  const coordStr = points.map(function (p) {
+    return p[0].toFixed(5) + ',' + p[1].toFixed(5);
+  }).join(';');
+
+  const url = 'https://api.mapbox.com/directions/v5/mapbox/' + profile + '/' + coordStr +
+    '?geometries=geojson&overview=full&access_token=' + mapboxgl.accessToken;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Directions API: ' + res.status);
+  const json = await res.json();
+  if (!json.routes || !json.routes.length) throw new Error('経路が見つかりません');
+  return json.routes[0].geometry.coordinates;
+}
+
+async function buildLeg(i) {
+  return buildLegBetween(spots[i], spots[i + 1]);
+}
+
+// 2地点から経路を作る。旅程の再生も、はじめの画面も、ここを通る。
+async function buildLegBetween(a, b) {
+  const mode = MODES[b.mode] ? b.mode : 'rail';
+  const via = viaCoords(b);
+
+  const key = mode + '|' + a.coord.join(',') + '|' +
+              via.map(function (v) { return v.join(','); }).join(';') + '|' +
+              viaList(b).map(function (v) { return v.line ? v.line.name : ''; }).join(';') + '|' +
+              b.coord.join(',');
+  /* 同じ経路は作り直さない。
+     ただし、どの空港を使ったかの記録は作り直しのときにしか更新されないので、
+     使い回すときもここで入れ直す。
+     そうしないと、地点を変えて元に戻したときに古い空港名が残る。 */
+  if (legCache[key]) {
+    if (legAir[key] && b.id !== undefined) flightAirports[b.id] = legAir[key];
+    return legCache[key];
+  }
+
+  let coords;
+  const conf = MODES[mode];
+
+  if (conf.api) {
+    const pts = [a.coord].concat(via.slice(0, 23), [b.coord]);
+    try {
+      coords = await fetchRoad(conf.api, pts);
+    } catch (err) {
+      console.warn('道路経路の取得に失敗したため、直線で代用します', err);
+      coords = densify([a.coord].concat(via, [b.coord]));
+    }
+  } else if (conf.shape === 'track') {
+
+    const pts = [a.coord].concat(via, [b.coord]);
+    const lines = [null].concat(viaList(b).map(function (v) { return v.line || null; }));
+    try {
+      coords = await trackLeg(RAIL, pts, lines);
+    } catch (err) {
+      console.warn('線路をたどれなかったため、直線で代用します', err);
+      if (!introOn) toast('線路が見つからず直線にしました：' + err.message);
+      coords = densify(pts);
+    }
+  } else if (conf.shape === 'sea') {
+
+    coords = await seaLeg([a.coord].concat(via, [b.coord]));
+
+  } else if (conf.shape === 'air') {
+
+    const air = await flightPoints(a.coord, b.coord, via);
+    coords = greatCircleThrough(air.points);
+
+    /* どの空港を使ったかは編集画面で知らせたいので覚えておく。
+       ただし地点そのものには書き込まない。
+       JSON保存は地点をそのまま書き出すので、
+       利用者のファイルに勝手な情報が混ざってしまう。 */
+    legAir[key] = { from: air.from, to: air.to };
+    if (b.id !== undefined) flightAirports[b.id] = legAir[key];
+
+  } else if (conf.shape === 'arc') {
+    const pts = via.length
+      ? [a.coord].concat(via, [b.coord])
+      : [a.coord, bendMid(a.coord, b.coord, conf.bend), b.coord];
+    coords = smoothThrough(pts);
+  } else {
+    coords = densify([a.coord].concat(via, [b.coord]));
+  }
+
+  legCache[key] = coords;
+  return coords;
+}
+
+async function buildAllLegs(onProgress) {
+  legs = [];
+  const total = Math.max(1, spots.length - 1);
+  for (let i = 0; i < spots.length - 1; i++) {
+
+    if (onProgress) onProgress(i, total, spots[i + 1].mode);
+    legs.push(await buildLeg(i));
+    if (onProgress) onProgress(i + 1, total, spots[i + 1].mode);
+  }
+}
+
+function routeUpTo(i) {
+  let out = [];
+  for (let k = 0; k < i && k < legs.length; k++) {
+    out = out.concat(k === 0 ? legs[k] : legs[k].slice(1));
+  }
+  return out;
+}
+
+function cumulative(coords) {
+  const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + dist(coords[i - 1], coords[i]));
+  return cum;
+}
+
+function alongPath(coords, cum, d) {
+  const total = cum[cum.length - 1];
+  if (total === 0) return { pt: coords[0], brg: 0, idx: 0 };
+  if (d <= 0) return { pt: coords[0], brg: bearingOf(coords[0], coords[1] || coords[0]), idx: 0 };
+  if (d >= total) {
+    const n = coords.length - 1;
+    return { pt: coords[n], brg: bearingOf(coords[n - 1] || coords[n], coords[n]), idx: n };
+  }
+  let lo = 0, hi = cum.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid] <= d) lo = mid; else hi = mid;
+  }
+  const seg = cum[hi] - cum[lo];
+  const t = seg > 0 ? (d - cum[lo]) / seg : 0;
+  const a = coords[lo], b = coords[hi];
+  return {
+    pt: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+    brg: bearingOf(a, b),
+    idx: lo
+  };
+}
+
+function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+/* 台形の速度。
+   短く加速し、あいだはずっと同じ速さで進み、最後に短く減速する。
+
+   完全な等速にすると、止まっている状態からいきなり全速になり、
+   着いた瞬間に止まるので引っかかって見える。
+   加減速に使うのを前後15%ずつに留めれば、
+   全体の70%は本当に一定の速さで流れ、巡航速度は平均の1.18倍で収まる。
+   （以前の正弦の曲線は、真ん中で平均の1.57倍まで速くなっていた） */
+
+const CRUISE_RAMP = 0.15;
+
+function easeCruise(t) {
+  const r = CRUISE_RAMP;
+  const v = 1 / (1 - r);
+  if (t < r) return v * t * t / (2 * r);
+  if (t > 1 - r) { const u = 1 - t; return 1 - v * u * u / (2 * r); }
+  return v * (t - r / 2);
+}
+
+/* 経路の各点を、出発地から到着地への直線に落とした位置。
+
+   カメラはこの直線の上を一定の速さで進む。経路そのものの長さで測ると、
+   曲がっているところで直線に沿った進み具合が鈍り、速度が揺れてしまう。
+   後戻りする区間（折り返しなど）は、進まなかったものとして扱う。 */
+
+function projectOnLine(coords, gA, gKx, gx, gy) {
+  const proj = new Float64Array(coords.length);
+  let run = -Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const px = (coords[i][0] - gA[0]) * gKx;
+    const py = coords[i][1] - gA[1];
+    let v = px * gx + py * gy;
+    if (v < run) v = run; else run = v;
+    proj[i] = v;
+  }
+  return proj;
+}
+
+// 直線に沿ってこの位置まで来たとき、経路上のどこにいるか
+function alongProjected(coords, proj, want) {
+  const n = proj.length - 1;
+  if (want <= proj[0]) return { pt: coords[0], idx: 0 };
+  if (want >= proj[n]) return { pt: coords[n], idx: n };
+
+  let lo = 0, hi = n;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (proj[mid] <= want) lo = mid; else hi = mid;
+  }
+  const seg = proj[hi] - proj[lo];
+  const u = seg > 0 ? (want - proj[lo]) / seg : 0;
+  const a = coords[lo], b = coords[hi];
+  return { pt: [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u], idx: lo };
+}
+
+// 出発地と到着地を結ぶ直線から、経路がいちばん外れる距離（度）
+function lateralSpread(coords) {
+  const a = coords[0], b = coords[coords.length - 1];
+  const kx = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
+  const ax = a[0] * kx, ay = a[1];
+  let dx = b[0] * kx - ax, dy = b[1] - ay;
+  const L = Math.sqrt(dx * dx + dy * dy);
+  if (L < 1e-9) return 0;
+  dx /= L; dy /= L;
+
+  let max = 0;
+  for (let i = 0; i < coords.length; i++) {
+    const px = coords[i][0] * kx - ax, py = coords[i][1] - ay;
+    const perp = Math.abs(px * -dy + py * dx);
+    if (perp > max) max = perp;
+  }
+  return max;
+}
+
+/* 移動にかける時間。
+   距離ではなく「画面が何枚ぶん流れるか」から決める。
+   こうすると、短い区間も長い区間も同じ速さで流れて揃う。 */
+
+function glideDuration(coords, tv, minMs, maxMs) {
+  const tz = travelZoomFor(coords, tv);
+  const wpx = map.getContainer().clientWidth || 1000;
+  const spanDeg = wpx * 360 / (512 * Math.pow(2, tz));
+
+  const a = coords[0], b = coords[coords.length - 1];
+  const kx = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
+  const L = Math.sqrt(Math.pow((b[0] - a[0]) * kx, 2) + Math.pow(b[1] - a[1], 2));
+
+  const screens = spanDeg > 0 ? L / spanDeg : 1;
+  const ms = screens / GLIDE_SPEED * 1000;
+  return Math.max(minMs || 3200, Math.min(maxMs || 13000, ms));
+}
+
+/* その区間を移動するときのズーム。動き出す前にここまで引いておく。
+
+   2つの条件のうち、きつい方を採る。
+     長さ   区間が画面 GLIDE_SCREENS 枚ぶんになる高さ。
+            これが無いと、短い区間で引きすぎて景色が動かなくなる。
+     横ぶれ 経路が直線から外れる分が画面に収まる高さ。
+
+   手段ごとの設定値は使わない。同じ飛行機でも 468km と 1157km では
+   ちょうどよい高さが違うので、区間の形から決めたほうが揃う。 */
+
+function travelZoomFor(coords, tv) {
+  const box = map.getContainer();
+  const wpx = box.clientWidth || 1000;
+  const hpx = box.clientHeight || 800;
+
+  const a = coords[0], b = coords[coords.length - 1];
+  const kx = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
+  const L = Math.sqrt(Math.pow((b[0] - a[0]) * kx, 2) + Math.pow(b[1] - a[1], 2));
+
+  let zLen = 22;
+  if (L > 1e-9) zLen = Math.log(wpx * 360 * GLIDE_SCREENS / (512 * L)) / Math.LN2;
+
+  let zLat = 22;
+  const spread = lateralSpread(coords);
+  if (spread > 1e-9) {
+    const needDeg = spread * 2 / GLIDE_FIT;
+    zLat = Math.log(hpx * 360 / (512 * needDeg)) / Math.LN2;
+  }
+
+  return Math.max(3, Math.min(zLen, zLat, 15));
+}
+
+// 経路の横ぶれが画面に収まるズーム。寄りすぎを防ぐ。
+function fitZoomFor(coords, want) {
+  const box = map.getContainer();
+  const hpx = box.clientHeight || 800;
+  const spread = lateralSpread(coords);
+  if (spread < 1e-9) return want;
+
+  const needDeg = spread * 2 / GLIDE_FIT;
+  const z = Math.log(hpx * 360 / (512 * needDeg)) / Math.LN2;
+  return Math.max(3, Math.min(want, z));
+}
+
+function lerpAngle(a, b, t) {
+  const d = ((b - a + 540) % 360) - 180;
+  return a + d * t;
+}
+
+const FOLLOW_GAIN = 1.7;
+const MAX_TURN = 20;
+const DRAW_EVERY = 80;
+
+/* ---------------------------------------------------------------------------
+   カメラの向き
+
+   以前は章ごとに (i * 41) % 360 度だけ地図を回していた。方角に意味がなく、
+   南へ下る旅なのに画面上でどちらへ進んでいるのか読めなくなっていた。
+
+   いまは北を上に固定する。さらに、カメラは経路を追いかけない。
+
+   出発地から到着地へ向かう一本の直線の上を、同じ割合だけ滑っていく。
+   線路がどう曲がろうと、カメラの進む向きは最初から最後まで変わらない。
+   曲がりは「画面の中で線が流れる」形で見える。追従による揺れが原理的に起きない。
+
+   寄りすぎると経路が画面から出てしまうので、
+   直線からの横ぶれを測って、収まるところまでズームを引く。
+   --------------------------------------------------------------------------- */
+
+const NORTH_UP = true;
+
+/* カメラは線を追いかけない。
+   出発地から到着地へ向かう一本の向きだけを保ち、そのまま滑っていく。
+   線のほうが画面の中を流れていく、という見え方になる。 */
+const GLIDE_LEAD = 0.10;    // 進行方向へどれだけ先を見るか（画面幅に対する割合）
+const GLIDE_FIT = 0.60;     // 経路の横ぶれを画面の何割に収めるか
+const GLIDE_SCREENS = 2.5;  // 区間の長さを画面何枚ぶんに収めるか
+const GLIDE_SPEED = 0.22;   // 景色が流れる速さ（画面/秒）。移動時間はここから決まる
+const GLIDE_EDGE = 0.20;    // 出入りで先読みを効かせる区間（前後それぞれ）
+const GLIDE_ZOOM_MS = 1400; // 動き出す前に引く／着いてから寄る時間
+
+function flyAlong(coords, duration, o) {
+  return new Promise(function (resolve) {
+    if (!coords || coords.length < 2) { resolve(); return; }
+
+    const opt = o || {};
+    const alive = opt.alive || function () { return playing; };
+    const tv = opt.travel || { zoom: TRAVEL_ZOOM, pitch: TRAVEL_PITCH };
+    const zA = (opt.zoomStart === undefined) ? STOP_ZOOM : opt.zoomStart;
+    const zB = (opt.zoomEnd === undefined) ? STOP_ZOOM : opt.zoomEnd;
+    const pA = (opt.pitchStart === undefined) ? STOP_PITCH : opt.pitchStart;
+    const pB = (opt.pitchEnd === undefined) ? STOP_PITCH : opt.pitchEnd;
+    const base = opt.base || [];
+    const drawLine = (opt.drawLine === undefined) ? true : opt.drawLine;
+
+    const cum = cumulative(coords);
+    const total = cum[cum.length - 1];
+    const look = Math.max(total * (tv.look || 0.07), 1e-6);
+
+    let curBrg = opt.startBearing || 0;
+    let aimBrg = curBrg;
+
+    // カメラが滑る一本の向き。出発地から到着地への直線で、途中で変わらない。
+    const gA = coords[0], gB = coords[coords.length - 1];
+    const gKx = Math.cos((gA[1] + gB[1]) / 2 * Math.PI / 180);
+    let gx = (gB[0] - gA[0]) * gKx, gy = gB[1] - gA[1];
+    const gLen = Math.sqrt(gx * gx + gy * gy);
+    if (gLen > 1e-9) { gx /= gLen; gy /= gLen; }
+
+    // 経路の横ぶれが画面に収まるところまでズームを引く
+    const tvZoom = NORTH_UP ? fitZoomFor(coords, tv.zoom) : tv.zoom;
+
+    // 直線に落とした位置。カメラはこの上を一定の速さで進む。
+    const gProj = NORTH_UP ? projectOnLine(coords, gA, gKx, gx, gy) : null;
+    const gTotal = gProj ? gProj[gProj.length - 1] : 0;
+
+    const t0 = performance.now();
+    let lastNow = t0;
+    let lastDraw = 0;
+
+    function frame(now) {
+      if (!alive()) { resolve(); return; }
+
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastNow) / 1000));
+      lastNow = now;
+
+      let t = (now - t0) / duration;
+      if (t > 1) t = 1;
+      // 北を上に固定しているときは、直線に沿った位置を一定の速さで進める。
+      // 経路の長さで測ると、曲がったところで進みが鈍って速度が揺れる。
+      let at, gAlong = 0, d;
+      if (NORTH_UP) {
+        gAlong = easeCruise(t) * gTotal;
+        at = alongProjected(coords, gProj, gAlong);
+        d = cum[at.idx];
+      } else {
+        d = easeInOut(t) * total;
+        at = alongPath(coords, cum, d);
+      }
+
+      // 先読みの増減は、加速・減速と同じ区間で行う。
+      // 巡航中に増減させると、そのぶんカメラの速さが変わってしまう。
+      let dip;
+      if (NORTH_UP) {
+        if (t < CRUISE_RAMP) dip = easeInOut(t / CRUISE_RAMP);
+        else if (t > 1 - CRUISE_RAMP) dip = easeInOut((1 - t) / CRUISE_RAMP);
+        else dip = 1;
+      } else {
+        dip = Math.sin(Math.PI * t);
+      }
+
+      const zEnds = zA + (zB - zA) * t;
+      const pEnds = pA + (pB - pA) * t;
+      const zoom = zEnds - (zEnds - tvZoom) * dip;
+      const pitch = pEnds - (pEnds - tv.pitch) * dip;
+
+      const ahead = alongPath(coords, cum, Math.min(total, d + look));
+      if (dist(at.pt, ahead.pt) > 1e-9) aimBrg = bearingOf(at.pt, ahead.pt);
+
+      let center = at.pt;
+
+      if (NORTH_UP) {
+        curBrg = 0;
+
+        // カメラは経路を追わない。直線の上を、決めた速さで進むだけ。
+        // 経路の曲がりは、線が画面の中を横切る形で見える。
+
+        // 進行方向へ少しだけ先を見る（画面の幅に対する割合なので、見え方は一定）
+        const wpx = map.getContainer().clientWidth || 1000;
+        const spanDeg = wpx * 360 / (512 * Math.pow(2, zoom));
+        const ahead2 = gAlong + spanDeg * GLIDE_LEAD * dip;
+
+        center = [gA[0] + gx * ahead2 / (gKx || 1), gA[1] + gy * ahead2];
+      } else {
+        const aim = (t > 0.8 && opt.endBearing !== undefined)
+          ? lerpAngle(aimBrg, opt.endBearing, (t - 0.8) / 0.2) : aimBrg;
+
+        const diff = ((aim - curBrg + 540) % 360) - 180;
+        let step = diff * Math.min(1, dt * FOLLOW_GAIN);
+        const cap = MAX_TURN * dt;
+        if (step > cap) step = cap;
+        if (step < -cap) step = -cap;
+        curBrg = (curBrg + step + 360) % 360;
+      }
+
+      map.jumpTo({ center: center, zoom: zoom, pitch: pitch, bearing: curBrg });
+
+      if (drawLine && (now - lastDraw > DRAW_EVERY || t === 1)) {
+        drawRoute(base.concat(coords.slice(0, at.idx + 1), [at.pt]));
+        lastDraw = now;
+      }
+
+      if (t < 1) requestAnimationFrame(frame);
+      else resolve();
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   はじめの画面で流れる旅
+
+   札幌から那覇まで、日本を縦断した9日間。7つの地点を、5種類の乗り物で結ぶ。
+
+   ここは飾りの動画ではない。利用者が自分で旅程を組んだときと
+   まったく同じ処理を通っている。
+     ・鉄道は buildLegBetween → trackLeg で、国土数値情報の線路の上をたどる
+     ・船は buildLegBetween → seaLeg で、OpenStreetMap の航路の上をたどる
+     ・車は Mapbox の経路探索で、実際の道路をたどる
+     ・海を渡る区間は flight（弧）
+     ・日付・写真・感想も、利用者が書くのと同じ場所に入れてある
+
+   経由地は「乗り換え地点」。線路は路線ごとに分かれているので、
+   東海道新幹線を降りる新大阪を置いてある。
+   --------------------------------------------------------------------------- */
+
+const INTRO_SPOTS = [
+  { name: '札幌', wiki: '札幌市時計台', coord: [141.3507, 43.0687],
+    date: '2026年8月1日', mode: 'rail', via: [],
+    note: '朝いちばんの札幌駅。ここから南へ、二千キロ。',
+    zoom: 15.2, pitch: 60, bearing: 20 },
+
+  /* 函館線 → 千歳線 → 室蘭線。経由地は路線どうしが実際に接する点。
+     港の座標は国土数値情報 N09（定期旅客航路）の公式値。
+
+     最後の苫小牧駅→フェリーターミナルの3.4kmだけは線路が無いので直線になる。
+     実際にもここはバスで移動する区間で、
+     起動時に「区間 4 の線路をたどれませんでした」と出るのはそのため。異常ではない。 */
+  { name: '苫小牧港', wiki: '苫小牧港', coord: [141.6365, 42.6377],
+    date: '2026年8月1日', mode: 'railTrack',
+    via: [ { c: [141.4372, 43.0472], n: '白石' },
+           { c: [141.6930, 42.6720], n: '沼ノ端' },
+           { c: [141.5958, 42.6393], n: '苫小牧' } ],
+    note: '千歳線で南下。夕方の港で、船を待つ。',
+    zoom: 14.4, pitch: 56, bearing: 160 },
+
+  /* 太平洋を南下する実際の航路。
+     以前は沖合に7つの経由地を手で置いていたが、
+     いまは OpenStreetMap の航路（商船三井さんふらわあ 大洗〜苫小牧）を
+     そのままたどるので、経由地は要らない。741.8km・226点。 */
+  { name: '大洗港', wiki: '大洗港', coord: [140.5723, 36.3086],
+    date: '2026年8月2日', mode: 'ferry', via: [],
+    note: '船で一晩。甲板に出ると、陸の灯りが遠かった。',
+    zoom: 13.6, pitch: 52, bearing: 240 },
+
+  { name: '東京', wiki: '東京駅', coord: [139.7671, 35.6812],
+    date: '2026年8月2日', mode: 'transit', via: [],
+    note: 'バスで都心へ。赤煉瓦の駅舎に着いた。',
+    zoom: 15.4, pitch: 62, bearing: 140 },
+
+  { name: '大阪', wiki: '大阪城', coord: [135.5259, 34.6873],
+    date: '2026年8月5日', mode: 'railTrack',
+    via: [ { c: [135.5000, 34.7336], n: '新大阪' } ],
+    note: '東海道新幹線で二時間半。天守閣は思っていたより白い。',
+    zoom: 15.0, pitch: 60, bearing: 300 },
+
+  { name: '広島', wiki: '原爆ドーム', coord: [132.4536, 34.3955],
+    date: '2026年8月7日', mode: 'driving', via: [],
+    note: '車で山陽路を西へ。日が傾くころに着いた。',
+    zoom: 15.6, pitch: 58, bearing: 60 },
+
+  { name: '那覇', wiki: '首里城', coord: [127.7195, 26.2170],
+    date: '2026年8月9日', mode: 'flight', via: [],
+    note: '空から見た海の色が、本州とはまるで違った。ここが終点。',
+    zoom: 15.2, pitch: 60, bearing: 210 }
+];
+
+const INTRO_OVERVIEW = 1800;
+const INTRO_OVERVIEW_HOLD = 500;
+const INTRO_IN = 4200;
+const INTRO_HOLD = 3600;
+const INTRO_OUT = 800;
+const INTRO_LEG = 7200;
+const INTRO_LEG_MAX = 10500;
+const INTRO_ROUNDS = 2;      // 何周したら止めるか
+const INTRO_TRAVEL = { zoom: 7.4, pitch: 42, look: 0.10 };
+
+let introOn = false;
+let introSeq = 0;
+const introImages = {};
+
+const MUTE_OPACITY = 0.15;
+const MUTE_COLOR = '#ddd6c7';
+let roadSaved = null;
+
+function mutableLineIds() {
+  const ids = [];
+  try {
+    (map.getStyle().layers || []).forEach(function (l) {
+      if (l.type !== 'line') return;
+      if (l.id === 'route-line' || l.id === 'route-glow') return;
+      const sl = l['source-layer'] || '';
+      if (sl === 'road' || sl === 'admin' || /^(road|bridge|tunnel|admin)/.test(l.id)) ids.push(l.id);
+    });
+  } catch (e) { }
+  return ids;
+}
+
+function muteRoads(on) {
+  const ids = mutableLineIds();
+
+  if (on) {
+    if (!roadSaved) {
+      roadSaved = {};
+      ids.forEach(function (id) {
+        try {
+          roadSaved[id] = {
+            o: map.getPaintProperty(id, 'line-opacity'),
+            c: map.getPaintProperty(id, 'line-color')
+          };
+        } catch (e) { }
+      });
+    }
+    ids.forEach(function (id) {
+      try {
+        map.setPaintProperty(id, 'line-opacity', MUTE_OPACITY);
+        map.setPaintProperty(id, 'line-color', MUTE_COLOR);
+      } catch (e) { }
+    });
+    return;
+  }
+
+  if (!roadSaved) return;
+  Object.keys(roadSaved).forEach(function (id) {
+    try {
+      map.setPaintProperty(id, 'line-opacity', roadSaved[id].o);
+      map.setPaintProperty(id, 'line-color', roadSaved[id].c);
+    } catch (e) { }
+  });
+  roadSaved = null;
+}
+
+async function decodeAhead(url) {
+  if (!url) return null;
+  return new Promise(function (res) {
+    const im = new Image();
+    im.onload = function () {
+      if (im.decode) im.decode().then(function () { res(url); }, function () { res(url); });
+      else res(url);
+    };
+    im.onerror = function () { res(null); };
+    im.src = url;
+  });
+}
+
+async function loadIntroImages() {
+  for (let i = 0; i < INTRO_SPOTS.length; i++) {
+    const s = INTRO_SPOTS[i];
+    if (introImages[s.name] !== undefined) continue;
+    try {
+      const hit = await wikiByName(s.wiki);
+      introImages[s.name] = hit ? await decodeAhead(hit.url) : null;
+    } catch (err) {
+      introImages[s.name] = null;
+    }
+  }
+}
+
+function showIntroCard(s, i) {
+  const box = $('#introCard');
+  const url = introImages[s.name];
+  box.querySelector('.nm').textContent = s.name;
+  box.querySelector('.dt').textContent = s.date || '';
+  box.querySelector('.tx').textContent = s.note || '';
+
+  // どうやってここまで来たか。利用者の旅程と同じ言い方にする。
+  const conf = MODES[s.mode];
+  box.querySelector('.wy').textContent =
+    (i > 0 && conf) ? conf.ico + '　' + conf.label + 'で移動' : '出発';
+  const img = box.querySelector('img');
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; }
+  box.classList.add('on');
+}
+
+function hideIntroCard() {
+  $('#introCard').classList.remove('on');
+}
+
+/* 表に出ていないときは動かさない。
+
+   別のタブを見ているあいだも地図が動き続けると、
+   何も見えていないのにCPUと電池を使い続けることになる。 */
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    if (introOn) stopIntro();
+    if (playing) stopPlay();
+  }
+});
+
+function startIntro() {
+  if (introOn) return;
+  introOn = true;
+  document.body.classList.add('intro');
+  muteRoads(true);
+  loadIntroImages();
+  runIntro(++introSeq);
+}
+
+function stopIntro() {
+  if (!introOn) return;
+  introOn = false;
+  introSeq++;
+  document.body.classList.remove('intro');
+  hideIntroCard();
+  muteRoads(false);
+  map.stop();
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+  drawRoute([]);
+  renderGuide();
+}
+
+let introLegs = [];
+
+// 旅程の再生とまったく同じ経路生成を通す。
+// 鉄道の区間は、国土数値情報の線路の上を実際にたどる。
+/* 冒頭デモの道路の経路は、あらかじめ計算して保存してある。
+
+   この旅程は毎回まったく同じなので、開くたびに Mapbox に問い合わせる理由がない。
+   以前は訪問者ひとりにつき2回（大洗港→東京のバスと、大阪→広島の車）使っていた。
+   何もせず去っていく人のぶんも消費していたので、そこが一番の無駄だった。
+
+   保存した経路は、経路の使い回し用の棚（legCache）に先に置いておく。
+   こうすると buildLegBetween は「もう作ってある」と見なして、そのまま使う。
+
+   INTRO_SPOTS の座標を変えると鍵が合わなくなり、
+   そのときは今までどおり Mapbox に聞きに行く。壊れはしないが、
+   座標を変えたら tools/build-intro-legs.js を流し直すこと。 */
+let introLegsLoaded = false;
+
+async function loadIntroLegs() {
+  if (introLegsLoaded) return;
+  introLegsLoaded = true;
+  try {
+    const res = await fetch('data/intro/legs.json');
+    if (!res.ok) return;
+    const json = await res.json();
+    Object.keys(json.legs || {}).forEach(function (k) {
+      if (!legCache[k]) legCache[k] = json.legs[k];
+    });
+  } catch (err) {
+    console.warn('冒頭デモの保存済み経路を読めませんでした', err);
+  }
+}
+
+async function buildIntroLegs() {
+  if (introLegs.length) return;
+  await loadIntroLegs();
+  const out = [];
+  for (let i = 0; i < INTRO_SPOTS.length - 1; i++) {
+    out.push(await buildLegBetween(INTRO_SPOTS[i], INTRO_SPOTS[i + 1]));
+  }
+  introLegs = out;
+}
+
+function introRouteUpTo(i) {
+  let out = [];
+  for (let k = 0; k < i && k < introLegs.length; k++) {
+    out = out.concat(k === 0 ? introLegs[k] : introLegs[k].slice(1));
+  }
+  return out;
+}
+
+function introCardWidth(winW) {
+  if (winW < 900) return Math.max(150, Math.min(220, winW * 0.34));
+  return Math.max(220, Math.min(360, winW * 0.22));
+}
+
+function introPadding() {
+  const box = map.getContainer();
+  const w = box.clientWidth || 1000;
+  const h = box.clientHeight || 800;
+  const winW = window.innerWidth || w;
+  const cardW = introCardWidth(winW);
+
+  if (winW < 900) {
+    return { top: Math.round(h * 0.34), bottom: 20, left: 20, right: 20 };
+  }
+  const cardSpace = cardW + winW * 0.04 + 40;
+  return { top: 40, bottom: 40, left: 40, right: Math.round(Math.min(cardSpace, w * 0.5)) };
+}
+
+function introBounds() {
+  const b = new mapboxgl.LngLatBounds();
+  INTRO_SPOTS.forEach(function (s) { b.extend(s.coord); });
+  return b;
+}
+
+async function runIntro(my) {
+  /* 開いた直後は、地図の画像がまだ届いていない。
+     そのまま動き出すと、粗いモザイクのまま札幌へ寄っていくことになる。
+     いま画面に要る画像が出そろうまで待ってから動き始める。 */
+  await untilFirstIdle(9000);
+  if (!introOn || my !== introSeq) return;
+
+  // 線路をたどる経路は取得に少しかかる。出来上がるまで全体像を見せておく。
+  map.setPadding(introPadding());
+  drawRoute([]);
+  map.fitBounds(introBounds(), {
+    padding: 30, bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
+  });
+
+  await buildIntroLegs();
+  if (!introOn || my !== introSeq) return;
+
+  /* 何周も回し続けない。
+
+     ずっと動いていると、見ていないあいだもCPUを使い続ける。
+     2周したら、全体像を出したところで止める。
+     旅の形が画面に残るので、静止していても中身は伝わる。 */
+  let round = 0;
+
+  while (introOn && my === introSeq && round < INTRO_ROUNDS) {
+    round++;
+    map.setPadding(introPadding());
+    drawRoute([]);
+
+    map.fitBounds(introBounds(), {
+      padding: 30, bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
+    });
+    await sleep(INTRO_OVERVIEW);
+    if (!introOn || my !== introSeq) break;
+
+    /* 全体像が鮮明になってから寄っていく。
+       ここで待たないと、粗い画像のまま札幌へのズームが始まる。
+       2周目以降は画像がもう手元にあるので、待ってもすぐ返ってくる。 */
+    await untilIdle(4000);
+    if (!introOn || my !== introSeq) break;
+
+    await sleep(INTRO_OVERVIEW_HOLD);
+    if (!introOn || my !== introSeq) break;
+
+    for (let i = 0; i < INTRO_SPOTS.length; i++) {
+      if (!introOn || my !== introSeq) break;
+      const s = INTRO_SPOTS[i];
+
+      if (i === 0) {
+        map.flyTo({ center: s.coord, zoom: s.zoom, pitch: s.pitch,
+                    bearing: NORTH_UP ? 0 : s.bearing,
+                    duration: INTRO_IN, essential: true });
+        await sleep(INTRO_IN);
+        if (!introOn || my !== introSeq) break;
+        await untilIdle(1400);
+        if (!introOn || my !== introSeq) break;
+      }
+
+      // ここまでの経路を描いておく（再生と同じ見え方にする）
+      drawRoute(introRouteUpTo(i));
+
+      showIntroCard(s, i);
+      if (NORTH_UP) {
+        // 移動の高さから、この地点の高さへゆっくり寄る
+        map.easeTo({ center: s.coord, zoom: s.zoom + 0.3, pitch: s.pitch,
+                     duration: INTRO_HOLD, essential: true });
+      } else {
+        map.easeTo({ center: s.coord, bearing: s.bearing + 18, duration: INTRO_HOLD,
+                     easing: function (t) { return t; }, essential: true });
+      }
+      await sleep(INTRO_HOLD);
+      if (!introOn || my !== introSeq) break;
+
+      hideIntroCard();
+      await sleep(INTRO_OUT);
+      if (!introOn || my !== introSeq) break;
+
+      if (i < INTRO_SPOTS.length - 1) {
+        const next = INTRO_SPOTS[i + 1];
+        const conf = MODES[next.mode] || MODES.rail;
+
+        // ズームしながら動くと、景色の流れる速さが跳ね上がって落ち着かない。
+        // 先に引ききってから、同じ高さのまま滑る。
+        const tv = conf.travel || INTRO_TRAVEL;
+        const tz = NORTH_UP ? travelZoomFor(introLegs[i], tv) : tv.zoom;
+
+        if (NORTH_UP) {
+          map.easeTo({ center: s.coord, zoom: tz, pitch: tv.pitch,
+                       duration: GLIDE_ZOOM_MS, essential: true });
+          await sleep(GLIDE_ZOOM_MS);
+          if (!introOn || my !== introSeq) break;
+        }
+
+        // 動き出す前に、いま見えている範囲のタイルが届くのを待つ。
+        // 待たずに動くと、読み込みが移動に追いつかず地図が白いまま流れる。
+        await untilIdle(1400);
+        if (!introOn || my !== introSeq) break;
+
+        await flyAlong(introLegs[i], introLegDuration(i), {
+          alive: function () { return introOn && my === introSeq; },
+          base: introRouteUpTo(i),
+          startBearing: NORTH_UP ? 0 : s.bearing + 18,
+          endBearing: NORTH_UP ? 0 : next.bearing,
+          travel: tv,
+          zoomStart: NORTH_UP ? tz : s.zoom,
+          zoomEnd: NORTH_UP ? tz : next.zoom,
+          pitchStart: NORTH_UP ? tv.pitch : s.pitch,
+          pitchEnd: NORTH_UP ? tv.pitch : next.pitch
+        });
+      }
+    }
+
+    if (!introOn || my !== introSeq) break;
+    drawRoute(introRouteUpTo(INTRO_SPOTS.length - 1));
+    await sleep(1200);
+  }
+
+  // 止まるときは、旅の全体が見える形にしておく
+  if (introOn && my === introSeq) {
+    map.setPadding(introPadding());
+    drawRoute(introRouteUpTo(INTRO_SPOTS.length - 1));
+    map.easeTo({ center: introBounds().getCenter(), bearing: 0, pitch: 0,
+                 duration: 2000, essential: true });
+    map.fitBounds(introBounds(), { padding: 30, bearing: 0, pitch: 0,
+                                   duration: 2000, essential: true });
+  }
+}
+
+// 移動にかける時間。旅程の再生と同じ考え方で、距離から決める。
+// ただし、はじめの画面は繰り返し流れるので上限を短めに抑える。
+function introLegDuration(i) {
+  const next = INTRO_SPOTS[i + 1];
+  const t = (MODES[next.mode] || MODES.rail).travel;
+  const leg = introLegs[i];
+  if (!leg || !leg.length) return INTRO_LEG;
+
+  if (NORTH_UP) return glideDuration(leg, t, 3200, INTRO_LEG_MAX);
+
+  const len = cumulative(leg)[leg.length - 1];
+  return Math.max(t.min, Math.min(INTRO_LEG_MAX, t.ms * len));
+}
+
+/* 共有リンクで来た人に見せるもの。
+
+   以前はここで編集画面を出していた。
+   だが送った側が見せたかったのは「動く旅」であって、
+   検索欄や「全部消す」ボタンではない。
+   受け取った側も、何をすればいいのか分からなかったはずである。
+
+   なので共有リンクで開いたときは、そのまま物語を再生する。
+   見終わったあと「編集に戻る」で自分でも触れる。 */
+async function openShared() {
+  try {
+    await prepAndEnterStory();
+  } catch (err) {
+    console.warn('共有された旅程を再生できませんでした', err);
+    toast('共有された旅程を読み込みました');
+    return;
+  }
+
+  // 準備の途中で利用者が離れていたら、勝手に動き出さない
+  if (!document.body.classList.contains('mode-story')) return;
+
+  play();
+}
+
+function boot() {
+  const loaded = readHash();
+
+  if (loaded && loaded.spots.length) {
+
+    spots = loaded.spots;
+    tripName = loaded.name || '';
+    $('#tripName').value = tripName;
+    renderAll();
+    openShared();
+
+  } else {
+    renderAll();
+    startIntro();
+  }
+}
+
+function guideState() {
+  if (spots.length === 0) return 0;
+  if (spots.length === 1) return 1;
+  return 2;
+}
+
+const GUIDE = [
+  { msg: 'まず、旅の出発地を追加してください',
+    sub: '上の検索欄に駅名や地名を入れて、候補から選びます。「＋ 地図をクリックして追加」でも置けます。' },
+  { msg: '次に、移動した先を追加してください',
+    sub: '2つ以上になると経路がつながります。追加したものを選ぶと、日付・思い出・写真・移動手段を入力できます。' },
+  { msg: '「ストーリーを見る」で再生できます',
+    sub: '場所を選んで移動手段（鉄道・車・徒歩など）を設定すると、動きが変わります。まだ追加もできます。' }
+];
+
+function renderGuide() {
+  const s = guideState();
+  $('#guide .msg').textContent = GUIDE[s].msg;
+  $('#guide .sub').textContent = GUIDE[s].sub;
+
+  document.querySelectorAll('#guide .st').forEach(function (el) {
+    const i = Number(el.dataset.s);
+    el.className = 'st' + (i < s ? ' done' : (i === s ? ' now' : ''));
+  });
+
+  $('#storyBtn').disabled = spots.length < 2;
+  document.body.classList.toggle('has-spots', spots.length > 0);
+}
+
+function renderAll() {
+  renderList();
+  renderMarkers();
+  renderGuide();
+  if (!playing) drawRoute(routeUpTo(spots.length - 1));
+  renderStory();
+  $('#topbar .ttl').textContent = tripName || defaultTripName();
+}
+
+function renderList() {
+  const box = $('#list');
+  box.innerHTML = '';
+  $('#empty').style.display = spots.length ? 'none' : 'block';
+
+  spots.forEach(function (s, i) {
+    if (i > 0) {
+      const conf = MODES[s.mode] || MODES.rail;
+      const st = viaList(s);
+      const bar = document.createElement('div');
+      bar.className = 'legbar';
+      bar.innerHTML = '<span class="ico">' + conf.ico + '</span><span>' + conf.label + '</span>';
+      if (st.length) {
+        const tag = document.createElement('span');
+        tag.className = 'via';
+
+        const ln = st[0].line ? st[0].line.name : '';
+        tag.textContent = isRail(s.mode)
+          ? (st[0].n ? st[0].n + ' から' : '乗車駅あり') +
+            (ln ? '・' + ln : '') +
+            (st.length > 1 ? '（乗換 ' + (st.length - 1) + '）' : '')
+          : '経由 ' + st.length;
+        bar.appendChild(tag);
+      }
+      box.appendChild(bar);
+    }
+
+    const el = document.createElement('div');
+    el.className = 'item' + (s.id === selectedId ? ' sel' : '');
+    el.dataset.i = String(i);
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<span class="grip" title="ドラッグで並べ替え">⠿</span>' +
+      '<div class="no">' + (i + 1) + '</div><div class="nm"></div>' +
+      '<div class="ops"><button data-act="del">×</button></div>';
+    row.querySelector('.nm').textContent = s.name || '(名称未設定)';
+    el.appendChild(row);
+
+    const grip = row.querySelector('.grip');
+    grip.addEventListener('mousedown', function () { el.draggable = true; });
+    el.addEventListener('dragend', function () {
+      el.draggable = false;
+      document.querySelectorAll('.item').forEach(function (x) { x.classList.remove('over'); });
+    });
+    el.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', String(i));
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('over');
+    });
+    el.addEventListener('dragleave', function () { el.classList.remove('over'); });
+    el.addEventListener('drop', async function (e) {
+      e.preventDefault();
+      el.classList.remove('over');
+      const from = Number(e.dataTransfer.getData('text/plain'));
+      const to = Number(el.dataset.i);
+      if (isNaN(from) || from === to) return;
+      const moved = spots.splice(from, 1)[0];
+      spots.splice(to, 0, moved);
+      await rebuild();
+    });
+
+    const dt = document.createElement('div');
+    dt.className = 'dt';
+    dt.textContent = s.date || '';
+    el.appendChild(dt);
+
+    if (s.photo) {
+      const img = document.createElement('img');
+      img.className = 'thumb'; img.src = s.photo;
+      el.appendChild(img);
+    }
+
+    if (s.id === selectedId) el.appendChild(buildEditForm(s, i));
+
+    row.querySelector('.nm').addEventListener('click', function () {
+      selectedId = (selectedId === s.id) ? null : s.id;
+      renderList(); renderMarkers();
+      map.flyTo({ center: s.coord, zoom: 13, pitch: 55, duration: 1800, essential: true });
+    });
+
+    row.querySelector('[data-act=del]').addEventListener('click', async function () {
+      spots = spots.filter(function (x) { return x.id !== s.id; });
+      if (selectedId === s.id) selectedId = null;
+      await rebuild();
+    });
+
+    box.appendChild(el);
+  });
+
+}
+
+function nextStationName(s, k) {
+  const list = viaList(s);
+  return (k + 1 < list.length) ? (list[k + 1].n || '') : (s.name || '');
+}
+
+function buildLineRow(s, k, station, nextCoord) {
+  const row = document.createElement('div');
+  row.className = 'lineRow';
+
+  const label = document.createElement('span');
+  label.className = 'lbl';
+  label.textContent = '↳ 路線';
+
+  const val = document.createElement('span');
+  val.className = 'val';
+  val.textContent = station.line ? station.line.name : '未選択（自動で探します）';
+
+  const btn = document.createElement('button');
+  btn.textContent = station.line ? '変更' : '選ぶ';
+
+  const listBox = document.createElement('div');
+  listBox.className = 'lineList';
+
+  btn.addEventListener('click', async function () {
+    if (listBox.childNodes.length) { listBox.innerHTML = ''; return; }
+    btn.disabled = true;
+    val.textContent = '路線を探しています…';
+
+    let found = [];
+    let err0 = '';
+
+    try {
+      found = await findLines(RAIL, station.c, nextCoord);
+    } catch (err) {
+      err0 = err.message;
+      console.warn('路線データ', err);
+    }
+
+    btn.disabled = false;
+    val.textContent = station.line ? station.line.name : '未選択（自動で探します）';
+
+    if (!found.length) {
+      listBox.innerHTML = '<div class="none">' +
+        (err0 ? '路線データを読めませんでした（' + err0 + '）'
+              : '両方の地点の近くを通る路線が見つかりませんでした') + '</div>';
+      return;
+    }
+
+    found.forEach(function (ln) {
+      const item = document.createElement('button');
+      item.className = 'lineItem' + (station.line && station.line.name === ln.name ? ' on' : '');
+
+      const tag = document.createElement('span');
+      tag.className = 'src ksj';
+      tag.textContent = ln.operator;
+      item.appendChild(tag);
+      item.appendChild(document.createTextNode(ln.name));
+
+      item.addEventListener('click', async function () {
+        const cur = viaList(s);
+        const line = { name: ln.name, id: ln.id, operator: ln.operator, source: 'ksj' };
+        cur[k] = { c: station.c, n: station.n, line: line };
+        s.via = cur;
+        await rebuild();
+        toast(ln.name + ' を選びました');
+      });
+      listBox.appendChild(item);
+    });
+
+    if (station.line) {
+      const clear = document.createElement('button');
+      clear.className = 'lineItem clear';
+      clear.textContent = '選択を解除';
+      clear.addEventListener('click', async function () {
+        const cur = viaList(s);
+        cur[k] = { c: station.c, n: station.n };
+        s.via = cur;
+        await rebuild();
+      });
+      listBox.appendChild(clear);
+    }
+  });
+
+  row.appendChild(label);
+  row.appendChild(val);
+  row.appendChild(btn);
+
+  const wrap = document.createElement('div');
+  wrap.appendChild(row);
+  wrap.appendChild(listBox);
+  return wrap;
+}
+
+// 飛行機の区間で、どの空港を通ったかを知らせる
+function flightTip(s) {
+  const air = flightAirports[s.id];
+  const label = function (x) {
+    return x ? (x.name + (x.iata ? '（' + x.iata + '）' : '')) : null;
+  };
+  const from = air && label(air.from);
+  const to = air && label(air.to);
+
+  if (!from && !to) {
+    return '<div class="tip">地球の丸みに沿った最短の経路を通ります。' +
+           '近くに空港が見つからなかったので、地点どうしを直接つないでいます。</div>';
+  }
+  return '<div class="tip">近くの空港を自動で通ります：' +
+         '<b>' + (from || 'この地点') + ' → ' + (to || 'この地点') + '</b>。' +
+         'そこから先は地球の丸みに沿った最短の経路です。' +
+         '別の空港にしたいときは、経由地でその空港を指定してください。</div>';
+}
+
+function buildEditForm(s, index) {
+  const f = document.createElement('div');
+  f.className = 'edit';
+
+  let legHtml = '';
+  if (index > 0) {
+    const fromName = spots[index - 1].name || '前の場所';
+    legHtml =
+      '<div class="legBlock">' +
+        '<div class="legHead">' + fromName + ' → ここ　の移動</div>' +
+        '<select data-f="mode">' +
+          Object.keys(MODES).map(function (k) {
+            return '<option value="' + k + '"' + (s.mode === k ? ' selected' : '') + '>' +
+                   MODES[k].ico + ' ' + MODES[k].label + '</option>';
+          }).join('') +
+        '</select>' +
+        '<div class="stations"></div>' +
+        (armedVia === s.id
+          ? '<div class="picking">' +
+              '<b>' + (isRail(s.mode) ? stationRole(viaList(s).length) : '経由地') + 'を選んでいます</b>' +
+              '<span>上の検索欄で駅名を入れるか、地図をクリック</span>' +
+              '<button data-act="donevia">完了</button>' +
+            '</div>'
+          : '<div class="viaRow">' +
+              '<button data-act="via">' +
+                (isRail(s.mode)
+                  ? (viaList(s).length === 0 ? '乗車駅を指定する' : '駅を追加する')
+                  : '経由地を追加する') +
+              '</button>' +
+              '<button data-act="clearvia">すべて消す</button>' +
+            '</div>') +
+        (s.mode === 'railTrack'
+          ? '<div class="tip">実際の線路をたどります。区間ごとに分けて探すので、' +
+            '<b>途中の駅を入れて1区間を短くするほど、1回あたりが軽くなり成功しやすくなります。</b>' +
+            '長距離を一気に指定すると、時間がかかるか、見つからずに直線へ戻ることがあります。</div>'
+          : '') +
+        (s.mode === 'ferry'
+          ? '<div class="tip">実際の航路をたどります。' +
+            '<b>定期航路が見つからないときは、海の上に経由地を置いてください。</b>' +
+            'そのままだと陸を横切る線になります。</div>'
+          : '') +
+        (s.mode === 'flight' ? flightTip(s) : '') +
+      '</div>';
+  }
+
+  f.innerHTML =
+    legHtml +
+    '<label>場所の名前</label><input type="text" data-f="name">' +
+    '<label>日付</label><input type="text" data-f="date" placeholder="2024.05">' +
+    '<label>思い出</label><textarea data-f="note" rows="4" placeholder="そのとき何を見て、何を思ったか"></textarea>' +
+    '<label>写真</label><input type="file" class="file" accept="image/*" data-f="photo">';
+
+  const stBox = f.querySelector('.stations');
+  if (stBox) {
+    const list = viaList(s);
+    const rail = isRail(s.mode);
+
+    if (rail && !list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'stEmpty';
+      empty.textContent = 'どの駅から乗りましたか？　下のボタンで指定してください';
+      stBox.appendChild(empty);
+    }
+
+    list.forEach(function (v, k) {
+      const row = document.createElement('div');
+      row.className = 'stRow';
+      row.innerHTML = '<span class="role"></span><span class="nm"></span>' +
+        '<button data-del="1" title="削除">×</button>';
+      row.querySelector('.role').textContent = rail ? stationRole(k) : '経由';
+      row.querySelector('.nm').textContent =
+        v.n || (v.c[1].toFixed(3) + ', ' + v.c[0].toFixed(3));
+
+      row.querySelector('[data-del]').addEventListener('click', async function () {
+        const cur = viaList(s);
+        cur.splice(k, 1);
+        s.via = cur;
+        await rebuild();
+      });
+      stBox.appendChild(row);
+
+      if (rail) {
+        const next = (k + 1 < list.length) ? list[k + 1].c : s.coord;
+        stBox.appendChild(buildLineRow(s, k, v, next));
+      }
+    });
+
+    if (rail) {
+      const dest = document.createElement('div');
+      dest.className = 'stRow dest';
+      dest.innerHTML = '<span class="role">降車駅</span><span class="nm"></span>';
+      dest.querySelector('.nm').textContent = s.name || '(このスポット)';
+      stBox.appendChild(dest);
+    }
+  }
+
+  f.querySelector('[data-f=name]').value = s.name || '';
+  f.querySelector('[data-f=date]').value = s.date || '';
+  f.querySelector('[data-f=note]').value = s.note || '';
+
+  f.querySelectorAll('input[type=text], textarea').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      s[inp.dataset.f] = inp.value;
+      const card = f.closest('.item');
+      if (card) {
+        if (inp.dataset.f === 'name') card.querySelector('.nm').textContent = inp.value || '(名称未設定)';
+        if (inp.dataset.f === 'date') card.querySelector('.dt').textContent = inp.value;
+      }
+      renderStory();
+    });
+  });
+
+  const modeSel = f.querySelector('[data-f=mode]');
+  if (modeSel) {
+    modeSel.addEventListener('change', async function () {
+      s.mode = modeSel.value;
+      await rebuild();
+    });
+    const viaBtn = f.querySelector('[data-act=via]');
+    if (viaBtn) viaBtn.addEventListener('click', function () { setArmedVia(s.id); });
+
+    const doneBtn = f.querySelector('[data-act=donevia]');
+    if (doneBtn) doneBtn.addEventListener('click', function () { setArmedVia(null); });
+
+    const clearBtn = f.querySelector('[data-act=clearvia]');
+    if (clearBtn) clearBtn.addEventListener('click', async function () {
+      s.via = [];
+      await rebuild();
+    });
+  }
+
+  f.querySelector('[data-f=photo]').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () { s.photo = reader.result; renderAll(); };
+    reader.readAsDataURL(file);
+  });
+
+  if (MONETIZE.affiliate && s.name) {
+    const row = document.createElement('div');
+    row.className = 'affRow';
+    row.style.marginTop = '9px';
+    row.appendChild(makeAffLink(s, s.name + ' 周辺の宿を探す'));
+    f.appendChild(row);
+  }
+
+  return f;
+}
+
+async function rebuild() {
+  await buildAllLegs();
+  renderAll();
+}
+
+function renderMarkers() {
+  markers.forEach(function (m) { m.remove(); });
+  viaMarkers.forEach(function (m) { m.remove(); });
+  markers = []; viaMarkers = [];
+
+  spots.forEach(function (s, i) {
+    const el = document.createElement('div');
+    el.className = 'pin' + (s.id === selectedId ? ' on' : '');
+    el.textContent = String(i + 1);
+    el.addEventListener('click', function () {
+      selectedId = s.id;
+      renderList(); renderMarkers();
+      map.flyTo({ center: s.coord, zoom: 13, pitch: 55, duration: 1500, essential: true });
+    });
+    markers.push(new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(s.coord).addTo(map));
+
+    if (s.id === selectedId) {
+      viaList(s).forEach(function (v, k) {
+        const ve = document.createElement('div');
+        ve.className = 'vpin' + (k === 0 && isRail(s.mode) ? ' first' : '');
+        ve.title = (isRail(s.mode) ? stationRole(k) + '：' : '') + (v.n || '');
+        viaMarkers.push(new mapboxgl.Marker({ element: ve, anchor: 'center' })
+          .setLngLat(v.c).addTo(map));
+      });
+    }
+  });
+}
+
+function fitAll(dur) {
+  if (!spots.length) return;
+  const b = new mapboxgl.LngLatBounds();
+  const all = routeUpTo(spots.length - 1);
+  (all.length ? all : spots.map(function (s) { return s.coord; }))
+    .forEach(function (c) { b.extend(c); });
+
+  if (spots.length === 1) {
+    map.easeTo({ center: spots[0].coord, zoom: 12, pitch: 45,
+                 duration: (dur === undefined ? 1800 : dur) });
+    return;
+  }
+
+  map.fitBounds(b, {
+    padding: { top: 90, bottom: 90, left: 90, right: 90 },
+    duration: (dur === undefined ? 2200 : dur), pitch: 0, bearing: 0
+  });
+}
+
+$('#addBtn').addEventListener('click', function () { setArmed(!armed); });
+
+function setArmed(v) {
+  armed = v;
+  if (v) setArmedVia(null);
+  document.body.classList.toggle('arming', armed);
+  $('#addBtn').classList.toggle('armed', armed);
+  $('#addBtn').textContent = armed ? '✕ 追加をやめる' : '＋ 地図をクリックして追加';
+  $('#hint').textContent = '地図をクリックして場所を追加（Escで中止）';
+  map.getCanvas().style.cursor = armed ? 'crosshair' : '';
+}
+
+function setArmedVia(id) {
+  armedVia = id;
+  if (id) setArmedInternal(false);
+  document.body.classList.toggle('arming-via', !!id);
+  $('#hint').textContent = '乗り換えた駅を、検索するか地図クリックで追加（Escで終了）';
+  map.getCanvas().style.cursor = id ? 'crosshair' : '';
+
+  renderList();
+
+  if (id) {
+    const s = spots.find(function (x) { return x.id === id; });
+    const next = (s && isRail(s.mode)) ? stationRole(viaList(s).length) : '経由地';
+    $('#hint').textContent = next + 'を、検索するか地図クリックで指定（Escで終了）';
+    $('#q').placeholder = next + 'を検索（例：東京駅）';
+    $('#q').focus();
+  } else {
+    $('#q').placeholder = '場所を検索（例：東京駅）';
+  }
+}
+
+function setArmedInternal(v) {
+  armed = v;
+  document.body.classList.toggle('arming', v);
+  $('#addBtn').classList.toggle('armed', v);
+  $('#addBtn').textContent = v ? '✕ 追加をやめる' : '＋ 地図をクリックして追加';
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  setArmed(false);
+  setArmedVia(null);
+  if (playing) stopPlay();
+  prepSkipped = true;
+});
+
+map.on('click', async function (e) {
+  const c = [Number(e.lngLat.lng.toFixed(5)), Number(e.lngLat.lat.toFixed(5))];
+
+  if (armedVia) {
+    const s = spots.find(function (x) { return x.id === armedVia; });
+    if (s) {
+      addStation(s, { c: c, n: '' });
+    }
+    return;
+  }
+
+  if (!armed) return;
+  addSpot({ name: '新しい場所', coord: c });
+  setArmed(false);
+});
+
+async function addStation(s, entry) {
+  s.via = viaList(s);
+  s.via.push(entry);
+  const role = isRail(s.mode) ? stationRole(s.via.length - 1) : '経由地';
+  await rebuild();
+  toast(role + 'を追加しました' + (entry.n ? '：' + entry.n : ''));
+}
+
+async function addSpot(o) {
+  stopIntro();
+  const s = { id: uid++, name: o.name || '新しい場所', date: '', note: '',
+              coord: o.coord, mode: 'rail', via: [], photo: null };
+  spots.push(s);
+  selectedId = s.id;
+  await rebuild();
+  setTimeout(function () { focusNewItem(); }, 60);
+  return s;
+}
+
+function focusNewItem() {
+  const card = document.querySelector('.item.sel');
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const target = card.querySelector('[data-f=mode]') || card.querySelector('[data-f=date]');
+  if (target) target.focus();
+}
+
+const SEARCH_WAIT = 500;
+let searchTimer = null;
+let searchSeq = 0;
+
+async function searchPlaces(text) {
+  const c = map.getCenter();
+  const url = 'https://api.mapbox.com/search/searchbox/v1/forward' +
+    '?q=' + encodeURIComponent(text) +
+    '&language=ja' +
+    '&country=jp' +
+    '&limit=6' +
+    '&proximity=' + c.lng.toFixed(4) + ',' + c.lat.toFixed(4) +
+    '&access_token=' + mapboxgl.accessToken;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Search Box API: ' + res.status);
+  const json = await res.json();
+
+  return (json.features || []).map(function (f) {
+    const p = f.properties || {};
+    return {
+      name: p.name || p.name_preferred || '(名称不明)',
+      address: p.place_formatted || p.full_address || '',
+      cats: p.poi_category_ids || [],
+      coord: f.geometry.coordinates
+    };
+  });
+}
+
+$('#q').addEventListener('input', function () {
+  const text = this.value.trim();
+  clearTimeout(searchTimer);
+
+  if (text.length < 2) {
+    $('#qResults').innerHTML = '';
+    $('#qState').textContent = '';
+    return;
+  }
+
+  $('#qState').textContent = '入力が止まるのを待っています…';
+
+  searchTimer = setTimeout(function () { runSearch(text); }, SEARCH_WAIT);
+});
+
+/* 一度探した言葉は覚えておく。
+
+   打ち間違えて消して打ち直したり、別の地点で同じ駅をもう一度探したりすると、
+   そのたびに問い合わせが飛んでいた。
+   覚えておけば2回目からは待ち時間もゼロになる。 */
+const searchCache = {};
+
+async function runSearch(text) {
+  const my = ++searchSeq;
+
+  if (searchCache[text]) {
+    renderResults(searchCache[text]);
+    return;
+  }
+
+  $('#qState').textContent = '検索しています…';
+
+  let list;
+  try {
+    list = await searchPlaces(text);
+  } catch (err) {
+    console.warn(err);
+    $('#qState').textContent = '検索に失敗しました（' + err.message + '）';
+    return;
+  }
+  if (my !== searchSeq) return;
+
+  // 見つからなかったことも覚える。同じ言葉をまた聞きに行かないように。
+  searchCache[text] = list;
+  renderResults(list);
+}
+
+function renderResults(list) {
+  const box = $('#qResults');
+  box.innerHTML = '';
+
+  if (!list.length) {
+    $('#qState').textContent = '見つかりませんでした';
+    return;
+  }
+
+  let msg = '選ぶと訪れた場所として追加されます';
+  if (armedVia) {
+    const s = spots.find(function (x) { return x.id === armedVia; });
+    const role = (s && isRail(s.mode)) ? stationRole(viaList(s).length) : '経由地';
+    msg = '選ぶと「' + role + '」として追加されます';
+  }
+  $('#qState').textContent = msg;
+
+  list.forEach(function (r) {
+    const el = document.createElement('div');
+    el.className = 'qr';
+
+    const isStation = r.cats.some(function (c) {
+      return /rail|train|station|transit|metro|subway/.test(c);
+    });
+
+    const th = document.createElement('div');
+    th.className = 'th';
+    th.dataset.name = r.name;
+
+    const txt = document.createElement('div');
+    txt.className = 'tx';
+
+    const n = document.createElement('div');
+    n.className = 'n';
+    n.textContent = r.name;
+    if (isStation) {
+      const t = document.createElement('span');
+      t.className = 'tag';
+      t.textContent = '駅';
+      n.appendChild(t);
+    }
+
+    const a = document.createElement('div');
+    a.className = 'a';
+    a.textContent = r.address;
+
+    txt.appendChild(n);
+    txt.appendChild(a);
+    el.appendChild(th);
+    el.appendChild(txt);
+    el.addEventListener('click', function () { pickResult(r); });
+    box.appendChild(el);
+  });
+
+  fillResultThumbs(list.map(function (r) { return r.name; }), searchSeq);
+}
+
+async function fillResultThumbs(names, my) {
+  await fetchThumbs(names);
+  if (my !== searchSeq) return;
+
+  document.querySelectorAll('#qResults .th').forEach(function (box) {
+    const url = thumbCache[box.dataset.name];
+    if (!url) { box.classList.add('none'); return; }
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    box.appendChild(img);
+    box.classList.add('has');
+  });
+}
+
+async function pickResult(r) {
+  const coord = [Number(r.coord[0].toFixed(5)), Number(r.coord[1].toFixed(5))];
+
+  if (armedVia) {
+    const s = spots.find(function (x) { return x.id === armedVia; });
+    if (s) await addStation(s, { c: coord, n: r.name });
+  } else {
+    await addSpot({ name: r.name, coord: coord });
+    toast(r.name + ' を追加しました');
+  }
+
+  map.flyTo({ center: coord, zoom: 13.5, pitch: 55, duration: 1800, essential: true });
+
+  $('#q').value = '';
+  $('#qResults').innerHTML = '';
+  $('#qState').textContent = '';
+}
+
+const WIKI = 'https://ja.wikipedia.org/w/api.php';
+const wikiCache = {};
+
+async function getJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+function firstThumb(json) {
+  const pages = json && json.query && json.query.pages;
+  if (!pages) return null;
+
+  const list = Object.keys(pages).map(function (k) { return pages[k]; })
+    .sort(function (a, b) { return (a.index || 0) - (b.index || 0); });
+
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (p.thumbnail && p.thumbnail.source) {
+      return { url: p.thumbnail.source, title: p.title };
+    }
+  }
+  return null;
+}
+
+// はじめの画面のカードは幅280pxほど。1000pxの写真を取ると、
+// 展開したとき1枚2.5MBになり、6枚で15MBを無駄に抱えることになる。
+const INTRO_IMG_SIZE = 480;
+
+async function wikiByName(name) {
+  if (!name) return null;
+  const url = WIKI + '?action=query&format=json&origin=*' +
+    '&generator=search&gsrsearch=' + encodeURIComponent(name) + '&gsrlimit=3' +
+    '&prop=pageimages&piprop=thumbnail&pithumbsize=' + INTRO_IMG_SIZE;
+  return firstThumb(await getJson(url));
+}
+
+async function wikiByGeo(coord) {
+  if (!coord) return null;
+
+  const url = WIKI + '?action=query&format=json&origin=*' +
+    '&generator=geosearch' +
+    '&ggscoord=' + coord[1] + '%7C' + coord[0] +
+    '&ggsradius=1200&ggslimit=6' +
+    '&prop=pageimages&piprop=thumbnail&pithumbsize=1000';
+  return firstThumb(await getJson(url));
+}
+
+async function fetchAutoImage(s) {
+  const key = (s.name || '') + '|' + s.coord.join(',');
+  if (key in wikiCache) return wikiCache[key];
+
+  let found = null;
+  try {
+    found = await wikiByName(s.name);
+    if (!found) found = await wikiByGeo(s.coord);
+  } catch (err) {
+    console.warn('画像の自動取得に失敗しました（表示は省略されます）', err);
+  }
+
+  wikiCache[key] = found;
+  return found;
+}
+
+const thumbCache = {};
+
+function resolveTitles(json, wanted) {
+  const alias = {};
+  const q = json.query || {};
+  (q.normalized || []).forEach(function (n) { alias[n.from] = n.to; });
+  (q.redirects || []).forEach(function (r) { alias[r.from] = r.to; });
+
+  const byTitle = {};
+  Object.keys(q.pages || {}).forEach(function (k) {
+    const p = q.pages[k];
+    if (p.thumbnail && p.thumbnail.source) byTitle[p.title] = p.thumbnail.source;
+  });
+
+  const out = {};
+  wanted.forEach(function (name) {
+    let cur = name, guard = 0;
+    while (alias[cur] && guard++ < 5) cur = alias[cur];
+    if (byTitle[cur]) out[name] = byTitle[cur];
+  });
+  return out;
+}
+
+async function fetchThumbs(names) {
+  const need = names.filter(function (n) { return n && thumbCache[n] === undefined; });
+  if (!need.length) return;
+
+  const url = WIKI + '?action=query&format=json&origin=*&redirects=1' +
+    '&titles=' + encodeURIComponent(need.join('|')) +
+    '&prop=pageimages&piprop=thumbnail&pithumbsize=180';
+
+  let found = {};
+  try {
+    found = resolveTitles(await getJson(url), need);
+  } catch (err) {
+    console.warn('画像のまとめ取得に失敗しました', err);
+  }
+  need.forEach(function (n) { thumbCache[n] = found[n] || null; });
+}
+
+async function fetchAllAutoImages(onProgress) {
+  const need = spots.filter(function (s) { return !s.photo; });
+  for (let i = 0; i < need.length; i++) {
+    if (prepSkipped) break;
+    need[i].autoImg = await fetchAutoImage(need[i]);
+    if (onProgress) onProgress(i + 1, need.length);
+  }
+}
+
+let prepSkipped = false;
+$('#skipBtn').addEventListener('click', function () { prepSkipped = true; });
+$('#mapFailRetry').addEventListener('click', function () { location.reload(); });
+
+function setPrep(msg, n, total) {
+  $('#prep .st').textContent = msg;
+  if (total) {
+    $('#prep .bar i').style.width = (n / total * 100) + '%';
+    $('#prep .cnt').textContent = n + ' / ' + total;
+  } else {
+    $('#prep .cnt').textContent = '';
+  }
+}
+
+function preloadTargets() {
+  const list = [];
+  spots.forEach(function (s, i) { list.push(camFor(i)); });
+
+  legs.forEach(function (coords, i) {
+    const tv = travelFor(i);
+    const cum = cumulative(coords);
+    const total = cum[cum.length - 1];
+    const n = tv.samples || 3;
+    for (let k = 1; k <= n; k++) {
+      const at = alongPath(coords, cum, total * (k / (n + 1)));
+      list.push({ center: at.pt, zoom: tv.zoom, pitch: tv.pitch, bearing: at.brg });
+    }
+  });
+  return list;
+}
+
+function untilIdle(timeout) {
+  return new Promise(function (resolve) {
+    if (!map.isMoving() && map.areTilesLoaded()) { resolve(); return; }
+    let done = false;
+    const finish = function () {
+      if (done) return;
+      done = true;
+      map.off('idle', finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeout || 8000);
+    map.on('idle', finish);
+  });
+}
+
+/* 開いた直後だけに使う、もうひとつの待ち方。
+
+   untilIdle は「いま動いておらず、画像も揃っている」なら待たずに先へ進む。
+   ところが開いた直後は、まだ1枚も読みに行っていないので、
+   その条件がそのまま成り立ってしまう。「読み込む前」と「読み終わり」の
+   区別がつかない、ということ。
+
+   なので最初の一回だけは、地図から通知が実際に届くまで待つ。
+   届かないまま時間切れになったら、ネットワークが遅いか繋がっていないので、
+   待たずに始める。
+
+   ただし map.loaded() が true のとき、つまり最初の描画がもう終わっているときは
+   待ってはいけない。そこで待つと、通知はもう二度と来ないので
+   時間切れの分だけ画面が止まってしまう。 */
+function untilFirstIdle(timeout) {
+  return new Promise(function (resolve) {
+    if (map.loaded()) { resolve(); return; }
+
+    let done = false;
+    const finish = function () {
+      if (done) return;
+      done = true;
+      map.off('idle', finish);
+      map.off('load', finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeout || 9000);
+    map.on('load', finish);     // 最初の描画が終わった合図
+    map.on('idle', finish);     // 念のため、こちらでも拾う
+  });
+}
+
+$('#storyBtn').addEventListener('click', prepAndEnterStory);
+
+async function prepAndEnterStory() {
+  if (spots.length < 2) { toast('場所を2つ以上追加してください'); return; }
+
+  prepSkipped = false;
+  document.body.classList.add('prepping');
+
+  setPrep('経路を計算しています', 0, Math.max(1, spots.length - 1));
+  await buildAllLegs(function (n, t, mode) {
+    setPrep(mode === 'railTrack'
+      ? '線路を探しています（少し時間がかかります）'
+      : '経路を計算しています', n, t);
+  });
+  renderAll();
+
+  setPrep('画像を探しています', 0, 1);
+  await fetchAllAutoImages(function (n, t) { setPrep('画像を探しています', n, t); });
+  renderStory();
+
+  fitAll(0);
+  await untilIdle(8000);
+
+  const targets = preloadTargets();
+  for (let i = 0; i < targets.length; i++) {
+    if (prepSkipped) break;
+    map.jumpTo(targets[i]);
+    await untilIdle(7000);
+    setPrep('地図を読み込んでいます', i + 1, targets.length);
+  }
+
+  fitAll(0);
+  await untilIdle(5000);
+
+  document.body.classList.remove('prepping');
+  await setMode('story');
+}
+
+$('#editBtn').addEventListener('click', function () { setMode('edit'); });
+
+async function setMode(m) {
+  if (playing) stopPlay();
+
+  document.body.classList.remove('mode-edit', 'mode-story', 'arming', 'arming-via', 'playing');
+  document.body.classList.add('mode-' + m);
+  hidePhoto();
+  armed = false; armedVia = null;
+  map.getCanvas().style.cursor = '';
+  map.resize();
+
+  if (m === 'story') {
+    map.scrollZoom.disable();
+    drawRoute(routeUpTo(spots.length - 1));
+    showDetail(true);
+    gotoStep(0);
+  } else {
+    map.scrollZoom.enable();
+    showDetail(true);
+    renderAll();
+  }
+}
+
+function showDetail(on) { document.body.classList.toggle('detail-on', on); }
+
+/* 旅の名前が空のときに、表紙へ出す題名。
+
+   以前は「無題の旅」と出していたが、これは
+   「書き手が名前をつけなかった」ということしか読み手に伝えない。
+
+   どこからどこへ動いたかは、すでに分かっている。
+   それを題名にすれば、名前が無くても本物の題名として成立する。 */
+/* 表紙は文字が大きいので、日本語だとどこで折り返されるか分からない。
+   放っておくと「牧落駅から城 / 崎温泉へ」のように地名の途中で切れる。
+   なので行の分かれ目もこちらで決めて、行ごとに返す。 */
+function defaultTripLines() {
+  const named = spots.filter(function (s) { return (s.name || '').trim(); });
+  if (!named.length) return ['名前のない旅'];
+
+  const first = named[0].name.trim();
+  const last = named[named.length - 1].name.trim();
+
+  // まだ出発地しか無いとき
+  if (named.length === 1) return [first + 'からの旅'];
+
+  // 戻ってくる旅。「東京から東京へ」では変なので言い方を変える
+  if (first === last) return [first + 'をめぐる旅'];
+
+  return [first + 'から', last + 'へ'];
+}
+
+function defaultTripName() { return defaultTripLines().join(''); }
+
+function renderStory() {
+  const box = $('#storyInner');
+  box.innerHTML = '';
+
+  const cover = document.createElement('div');
+  cover.className = 'step cover';
+  cover.innerHTML = '<div class="panel"><h1></h1><p></p></div>';
+  const h1 = cover.querySelector('h1');
+  const lines = tripName ? [tripName] : defaultTripLines();
+  h1.textContent = '';
+  lines.forEach(function (t, i) {
+    if (i) h1.appendChild(document.createElement('br'));
+    h1.appendChild(document.createTextNode(t));
+  });
+
+  // 地名が長いときは、はみ出さないよう文字を小さくする
+  const longest = lines.reduce(function (m, t) { return Math.max(m, t.length); }, 0);
+  h1.className = longest > 8 ? 'long' : '';   // 42pxだと9文字で枠(390px)を超える
+
+  cover.querySelector('p').textContent = spots.length + ' か所の旅';
+  box.appendChild(cover);
+
+  spots.forEach(function (s, i) {
+    const c = document.createElement('div');
+    c.className = 'step chap';
+    c.dataset.i = String(i);
+
+    const conf = MODES[s.mode] || MODES.rail;
+    const inner = document.createElement('div');
+    inner.className = 'box';
+    inner.innerHTML =
+      '<div class="num">CHAPTER ' + String(i + 1).padStart(2, '0') + '</div>' +
+      '<h2></h2><div class="dt"></div>' +
+      (i > 0 ? '<div class="way">' + conf.ico + '　' + conf.label + 'で移動</div>' : '') +
+      '<p></p>';
+    inner.querySelector('h2').textContent = s.name || '(名称未設定)';
+    inner.querySelector('.dt').textContent = s.date || '';
+    inner.querySelector('p').textContent = s.note || '';
+
+    const pic = imageOf(s);
+    if (pic) {
+      const img = document.createElement('img');
+      img.src = pic.url;
+      inner.appendChild(img);
+      if (pic.src) {
+        const cr = document.createElement('div');
+        cr.style.cssText = 'font-size:10px;color:var(--muted);margin-top:5px;';
+        cr.textContent = pic.src;
+        inner.appendChild(cr);
+      }
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'noimg';
+      ph.textContent = '写真を追加すると、ここに表示されます';
+      inner.appendChild(ph);
+    }
+
+    if (MONETIZE.affiliate && s.name) {
+      inner.appendChild(makeAffLink(s, s.name + ' 周辺の宿を探す'));
+    }
+
+    c.appendChild(inner);
+    box.appendChild(c);
+  });
+
+  const end = document.createElement('div');
+  end.className = 'step end';
+  end.innerHTML = '<div class="panel"><h2>よい旅を。</h2>' +
+    '<p style="color:var(--muted);font-size:11px;margin-top:12px;letter-spacing:2px;">' +
+    '旅情 &nbsp;RYOJO</p></div>';
+  box.appendChild(end);
+}
+
+let scrollSeq = 0;
+
+// 指定した章へカメラを動かす。線は、その章までを描く。
+async function gotoChapter(i) {
+  if (!spots[i]) return;
+  const my = ++scrollSeq;
+
+  const cam = camFor(i);
+  cam.duration = 2600;
+  cam.essential = true;
+  map.flyTo(cam);
+  drawRoute(routeUpTo(i));
+  if (my !== scrollSeq) return;
+}
+
+/* ---------------------------------------------------------------------------
+   章の送り
+
+   以前はスクロール位置を IntersectionObserver で見て章を切り替えていた。
+   スクロール量と章の対応が直感的でなく、途中で止まると
+   どの章にいるのか分からなくなるうえ、自動再生と操作が競合していた。
+
+   いまは「進む・戻る」で1章ずつ動かす。位置は stepIndex ひとつが持つ。
+     0            表紙
+     1 … n        各章（spots[0] … spots[n-1]）
+     n+1          おわり
+   --------------------------------------------------------------------------- */
+
+let stepIndex = 0;
+
+function stepCount() { return spots.length + 2; }
+
+function stepEls() { return [...document.querySelectorAll('#storyInner .step')]; }
+
+async function gotoStep(i, opt) {
+  const total = stepCount();
+  i = Math.max(0, Math.min(total - 1, i));
+  stepIndex = i;
+
+  const els = stepEls();
+  els.forEach(function (el, k) { el.classList.toggle('active', k === i); });
+
+  const chap = els[i] && els[i].classList.contains('chap');
+  if (chap) {
+    document.querySelectorAll('.chap').forEach(function (c) { c.classList.remove('active'); });
+    els[i].classList.add('active');
+  }
+
+  updateStepNav();
+
+  if (i === 0 || i === total - 1) {
+    drawRoute(routeUpTo(spots.length - 1));
+    fitAll(1400);
+  } else if (!(opt && opt.skipCamera)) {
+    await gotoChapter(i - 1);
+  }
+}
+
+function updateStepNav() {
+  const total = stepCount();
+  const prev = $('#prevBtn'), next = $('#nextBtn'), now = $('#stepNow');
+  if (!prev) return;
+
+  prev.disabled = stepIndex <= 0;
+  next.disabled = stepIndex >= total - 1;
+
+  if (stepIndex === 0) now.textContent = 'はじめ';
+  else if (stepIndex === total - 1) now.textContent = 'おわり';
+  else now.textContent = stepIndex + ' / ' + spots.length;
+}
+
+function stepBy(d) {
+  if (playing) stopPlay();
+  gotoStep(stepIndex + d);
+}
+
+$('#prevBtn').addEventListener('click', function () { stepBy(-1); });
+$('#nextBtn').addEventListener('click', function () { stepBy(1); });
+
+// 矢印キーでも送れるようにする
+document.addEventListener('keydown', function (e) {
+  if (!document.body.classList.contains('mode-story')) return;
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); stepBy(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); stepBy(-1); }
+});
+
+const HOLD = 2600;
+const HOLD_PHOTO = 4400;
+const FADE = 1150;
+const PHOTO_FADE = 900;
+
+$('#playBtn').addEventListener('click', function () {
+  if (playing) stopPlay(); else play();
+});
+
+function activateChapter(i) {
+  // 自動再生中も、進む・戻ると同じ「いまどの章か」を共有する
+  stepIndex = i + 1;
+  stepEls().forEach(function (el, k) { el.classList.toggle('active', k === stepIndex); });
+  updateStepNav();
+}
+
+function imageOf(s) {
+  if (!s) return null;
+  if (s.photo) return { url: s.photo, src: null };
+  if (s.autoImg && s.autoImg.url) {
+    return { url: s.autoImg.url, src: 'Wikipedia：' + (s.autoImg.title || '') };
+  }
+  return null;
+}
+
+function showPhoto(s) {
+  const box = $('#photo');
+  const img = imageOf(s);
+  if (!img) { hidePhoto(); return false; }
+
+  box.querySelector('img').src = img.url;
+  box.querySelector('.nm').textContent = s.name || '';
+  box.querySelector('.dt').textContent = s.date || '';
+  box.querySelector('.src').textContent = img.src || '';
+  box.classList.add('on');
+  return true;
+}
+
+function hidePhoto() {
+  $('#photo').classList.remove('on');
+}
+
+async function play() {
+  if (spots.length < 2) { toast('場所を2つ以上追加してください'); return; }
+
+  playing = true;
+  hasPlayed = true;
+  document.body.classList.add('playing');
+  $('#playBtn').textContent = '■ 停止';
+  document.querySelectorAll('.chap').forEach(function (c) { c.classList.remove('active'); });
+  hidePhoto();
+
+  map.jumpTo(camFor(0));
+  await untilIdle(6000);
+
+  for (let i = 0; i < spots.length; i++) {
+    if (!playing) break;
+
+    activateChapter(i);
+    drawRoute(routeUpTo(i));
+    if (!playing) break;
+
+    const hasPhoto = showPhoto(spots[i]);
+    const hold = hasPhoto ? HOLD_PHOTO : HOLD;
+
+    // 止まっている間の動き。回すと方角を見失うので、静かに寄るだけにする。
+    const cam = camFor(i);
+    if (NORTH_UP) {
+      map.easeTo({ zoom: cam.zoom + 0.22, duration: hold, essential: true });
+    } else {
+      map.easeTo({ bearing: cam.bearing + 10, duration: hold, essential: true });
+    }
+    await sleep(hold);
+    if (!playing) break;
+
+    if (hasPhoto) {
+      hidePhoto();
+      await sleep(PHOTO_FADE);
+      if (!playing) break;
+    }
+
+    if (i < spots.length - 1) {
+      await flyAlong(legs[i], travelDuration(i), {
+        startBearing: NORTH_UP ? 0 : camFor(i).bearing + 10,
+        endBearing: NORTH_UP ? 0 : camFor(i + 1).bearing,
+        base: routeUpTo(i),
+        travel: travelFor(i)
+      });
+    }
+  }
+
+  if (playing) {
+    drawRoute(routeUpTo(spots.length - 1));
+    fitAll(2800);
+    await sleep(2800);
+    if (playing) await gotoStep(stepCount() - 1, { skipCamera: true });
+  }
+  stopPlay();
+}
+
+function stopPlay() {
+  playing = false;
+  document.body.classList.remove('playing');
+  scrollSeq++;
+  hidePhoto();
+  $('#playBtn').textContent = '▶ 自動再生';
+  showDetail(true);
+  updateStepNav();
+}
+
+$('#baseStyle').addEventListener('change', function () {
+  if (playing) stopPlay();
+  baseStyle = $('#baseStyle').value;
+  map.setStyle(STYLES[baseStyle]);
+  toast(baseStyle === 'sat' ? '航空写真に切り替えました' : 'Standard(3D)に切り替えました');
+});
+
+$('#tripName').addEventListener('input', function () {
+  tripName = this.value;
+  renderStory();
+  $('#topbar .ttl').textContent = tripName || defaultTripName();
+});
+
+$('#clearBtn').addEventListener('click', async function () {
+  if (!spots.length) return;
+  if (!confirm('追加した場所をすべて消しますか？（元に戻せません）')) return;
+  spots = []; selectedId = null; legs = [];
+  await rebuild();
+  map.easeTo({ center: JAPAN_CENTER, zoom: JAPAN_ZOOM, pitch: 0, bearing: 0, duration: 1500 });
+  toast('すべて消しました');
+});
+
+function encodeState() {
+  const lite = spots.map(function (s) {
+
+    const v = viaList(s).map(function (x) { return [x.c[0], x.c[1], x.n || '']; });
+    return { n: s.name, d: s.date, t: s.note, c: s.coord, m: s.mode, v: v };
+  });
+  const json = JSON.stringify({ name: tripName, s: lite });
+  const bytes = new TextEncoder().encode(json);
+  let bin = '';
+  bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeState(str) {
+  try {
+    let b = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (b.length % 4) b += '=';
+    const bin = atob(b);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const obj = JSON.parse(new TextDecoder().decode(bytes));
+    return {
+      name: obj.name,
+      spots: (obj.s || []).map(function (x) {
+
+        const via = (x.v || []).map(function (e) {
+          return (e.length >= 3) ? { c: [e[0], e[1]], n: e[2] } : { c: [e[0], e[1]], n: '' };
+        });
+        return { id: uid++, name: x.n, date: x.d, note: x.t, coord: x.c,
+                 mode: x.m || 'rail', via: via, photo: null };
+      })
+    };
+  } catch (err) {
+    console.warn('共有データを読めませんでした', err);
+    return null;
+  }
+}
+
+function readHash() {
+  const h = location.hash.replace(/^#d=/, '');
+  if (!h || h === location.hash) return null;
+  return decodeState(h);
+}
+
+$('#shareBtn').addEventListener('click', function () {
+  if (!spots.length) { toast('先に場所を追加してください'); return; }
+  const code = encodeState();
+  const url = location.href.split('#')[0] + '#d=' + code;
+  location.hash = 'd=' + code;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(
+      function () { toast('共有リンクをコピーしました（写真は含まれません）'); },
+      function () { toast('URLバーのアドレスが共有リンクです'); }
+    );
+  } else {
+    toast('URLバーのアドレスが共有リンクです');
+  }
+});
+
+$('#saveBtn').addEventListener('click', function () {
+  if (!spots.length) { toast('先に場所を追加してください'); return; }
+  const data = JSON.stringify({ name: tripName, spots: spots }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (tripName || 'tracelog').replace(/[^\w぀-ヿ一-龯-]+/g, '_') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('JSONを保存しました');
+});
+
+$('#loadBtn').addEventListener('click', function () { $('#jsonFile').click(); });
+
+$('#jsonFile').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function () {
+    try {
+      const obj = JSON.parse(reader.result);
+      stopIntro();
+      tripName = obj.name || '';
+      spots = (obj.spots || []).map(function (s) {
+        return { id: uid++, name: s.name, date: s.date, note: s.note, coord: s.coord,
+                 mode: s.mode || 'rail',
+                 via: viaList(s),
+                 photo: s.photo || null };
+      });
+      selectedId = null;
+      $('#tripName').value = tripName;
+      await rebuild();
+      fitAll();
+      toast('読み込みました');
+    } catch (err) {
+      alert('JSONを読み込めませんでした: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* 収益化の仕組みは作ってあるが、v1では全部止めておく。
+
+   止める理由は「まだ本物が入っていない」ため。
+   affiliateId は仮の文字列、リンク先は example.com のまま。
+   この状態で公開すると「PR ◯◯周辺の宿を探す」を押した人が
+   何も無いページへ飛ばされる。信用を落とすだけで、得るものが無い。
+
+   Cookieの同意ダイアログも同じ理由で止めてある。
+   出す広告が無いのに同意を求めるのは筋が通らないし、
+   その中のプライバシーポリシーのリンクもまだ行き先が無い。
+
+   再開するときの順番:
+     1. サイトを公開する（ASPの審査でURLを聞かれる）
+     2. プライバシーポリシーと問い合わせ先を用意する
+     3. ASPに登録して、affiliateId と affiliateBase を本物にする
+     4. affiliate を true に戻す
+     5. 広告（AdSense等）を入れるなら ads と consent も true に戻す */
+const MONETIZE = {
+  ads: false,
+  affiliate: false,
+  consent: false,
+
+  affiliateId: 'YOUR_AFFILIATE_ID',
+  affiliateBase: 'https://example.com/hotels'
+};
+
+const EU_ZONES = /^(Europe\/|Atlantic\/(Azores|Madeira|Canary|Faroe|Reykjavik)|Arctic\/Longyearbyen)/;
+
+function inStrictRegion() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    return EU_ZONES.test(tz);
+  } catch (e) {
+    return true;
+  }
+}
+
+const CONSENT_KEY = 'ryojo_consent';
+let consentState = null;
+let strictRegion = true;
+
+function loadConsent() {
+  try { return localStorage.getItem(CONSENT_KEY); } catch (e) { return null; }
+}
+function saveConsent(v) {
+  consentState = v;
+  try { localStorage.setItem(CONSENT_KEY, v); } catch (e) {  }
+}
+
+function initConsent() {
+  strictRegion = inStrictRegion();
+  consentState = loadConsent();
+
+  if (!MONETIZE.consent) { consentState = consentState || 'all'; applyMonetize(); return; }
+
+  if (strictRegion && !consentState) {
+    document.body.classList.add('need-consent');
+  }
+  applyMonetize();
+}
+
+function closeConsent(v) {
+  saveConsent(v);
+  document.body.classList.remove('need-consent');
+  applyMonetize();
+  toast(v === 'all' ? 'パーソナライズ広告を許可しました' : '非パーソナライズ広告に設定しました');
+}
+
+$('#cAll').addEventListener('click', function () { closeConsent('all'); });
+$('#cNec').addEventListener('click', function () { closeConsent('necessary'); });
+
+$('#adPref').addEventListener('click', function () {
+  document.body.classList.add('need-consent');
+});
+
+function adMode() {
+  if (!MONETIZE.ads) return 'off';
+  if (consentState === 'all') return 'personalized';
+  if (strictRegion && !consentState) return 'blocked';
+  if (strictRegion && consentState === 'necessary') return 'blocked';
+  return 'npa';
+}
+
+function applyMonetize() {
+  const mode = adMode();
+  document.body.classList.toggle('no-ads', mode === 'off');
+  document.body.classList.toggle('no-aff', !MONETIZE.affiliate);
+
+  const box = $('#adBox');
+  if (mode === 'personalized') {
+    box.innerHTML = 'ここに広告が入ります<br><span>パーソナライズ広告 / 300 × 250</span>';
+  } else if (mode === 'npa') {
+    box.innerHTML = 'ここに広告が入ります<br><span>非パーソナライズ広告 / 300 × 250</span>';
+  } else if (mode === 'blocked') {
+    box.innerHTML = 'この地域では同意が必要なため<br><span>広告を読み込んでいません</span>';
+  }
+
+  $('#adPref').textContent = (mode === 'personalized')
+    ? '広告について（パーソナライズ中）' : '広告について';
+
+}
+
+function affiliateUrl(s) {
+  return MONETIZE.affiliateBase +
+    '?q=' + encodeURIComponent(s.name || '') +
+    '&aid=' + encodeURIComponent(MONETIZE.affiliateId);
+}
+
+function makeAffLink(s, label) {
+  const a = document.createElement('a');
+  a.className = 'aff';
+  a.href = affiliateUrl(s);
+  a.target = '_blank';
+  a.rel = 'noopener sponsored';
+  a.innerHTML = '<span class="pr">PR</span>';
+  a.appendChild(document.createTextNode(label));
+  return a;
+}
+
+$('#odptBtn').addEventListener('click', runRailCheck);
+$('#odptClose').addEventListener('click', function () {
+  document.body.classList.remove('odpt-open');
+});
+
+function checkLine(state, text, extra) {
+  const row = document.createElement('div');
+  row.className = 'step ' + state;
+  const m = document.createElement('span');
+  m.className = 'mark';
+  m.textContent = state === 'ok' ? '✓' : (state === 'ng' ? '×' : '…');
+  const t = document.createElement('span');
+  t.innerHTML = text + (extra ? ' <code>' + extra + '</code>' : '');
+  row.appendChild(m); row.appendChild(t);
+  $('#odptOut').appendChild(row);
+  return row;
+}
+
+// 手元の鉄道データが揃っているかを確かめる
+async function runRailCheck() {
+  document.body.classList.add('odpt-open');
+  const out = $('#odptOut');
+  out.innerHTML = '';
+
+  let idx;
+  try {
+    idx = await lineIndex(RAIL);
+  } catch (err) {
+    checkLine('ng', '路線一覧を読めません', 'data/rail/index.json');
+    const n1 = document.createElement('div');
+    n1.className = 'note';
+    n1.innerHTML = '<code>data/rail/</code> がこのページと同じ場所にあるか確認してください。' +
+      '無い場合は <code>tools/build-rail-data.js</code> で作れます。';
+    out.appendChild(n1);
+    return;
+  }
+
+  checkLine('ok', '路線一覧を読み込みました',
+    idx.lines.length + ' 路線 / ' + (idx.generated || '日付不明'));
+
+  const w = checkLine('wait', '東京駅と品川駅の間を通る路線を探しています…');
+  const t0 = performance.now();
+  let lines = [];
+  try {
+    lines = await findLines(RAIL, [139.7671, 35.6812], [139.7387, 35.6285]);
+  } catch (err) {
+    w.remove();
+    checkLine('ng', '探索に失敗しました', err.message);
+    return;
+  }
+  w.remove();
+
+  if (!lines.length) {
+    checkLine('ng', '路線が見つかりませんでした');
+  } else {
+    checkLine('ok', Math.round(performance.now() - t0) + 'ms で ' + lines.length + ' 路線',
+      lines.slice(0, 3).map(function (l) { return l.name; }).join('、'));
+  }
+
+  const w2 = checkLine('wait', '線路をたどっています…');
+  const t1 = performance.now();
+  try {
+    const seg = await trackSegment(RAIL, [139.7671, 35.6812], [139.7387, 35.6285],
+                                   lines.length ? lines[0] : null);
+    w2.remove();
+    let km = 0;
+    for (let i = 1; i < seg.length; i++) km += dist(seg[i - 1], seg[i]) * 111;
+    checkLine('ok', '東京 → 品川 を線路上でたどれました',
+      km.toFixed(1) + 'km / ' + seg.length + '点 / ' + Math.round(performance.now() - t1) + 'ms');
+  } catch (err) {
+    w2.remove();
+    checkLine('ng', '線路をたどれませんでした', err.message);
+  }
+
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.innerHTML = '出典: <b>国土数値情報（鉄道データ）国土交通省</b><br>' +
+    '外部のAPIには問い合わせていません。すべて手元のファイルです。';
+  out.appendChild(note);
+}
+
+let toastTimer = null;
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('on'); }, 2600);
+}
+
+renderGuide();
+initConsent();
+</script>
+
+</body>
+</html>

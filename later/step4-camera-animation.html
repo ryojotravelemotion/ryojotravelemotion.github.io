@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 4 — カメラを動かす（アニメーションの核心）</title>
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 100%; }
+  #log {
+    position: absolute; bottom: 10px; left: 10px; z-index: 1;
+    background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px;
+    border-radius: 6px; font-family: monospace; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="log">読み込み中…</div>
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+
+<script>
+// ============================================
+// Step 4: カメラを動かす
+//
+// ここが、Yutaさんが作りたい「旅行体験の演出」の中核です。
+// ============================================
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/standard',
+  center: [-0.1276, 51.5072],
+  zoom: 4,
+  pitch: 0
+});
+
+
+// --- カメラを動かす3つの命令 -----------------------------
+//
+//   map.jumpTo({...})  … 瞬間移動（アニメーションなし）
+//   map.easeTo({...})  … 直線的にスーッと移動
+//   map.flyTo({...})   … いったん引いて→飛んで→寄る。飛行機のような動き
+//
+// 旅行サイトで気持ちいいのは、ほぼ flyTo です。
+
+
+// --- 'load' イベント：地図の準備ができたら実行 --------------
+// 地図の読み込みには時間がかかります。
+// 読み込む前に命令を出すと失敗するので、「準備できたら」を待ちます。
+
+map.on('load', function () {
+  document.getElementById('log').textContent = '地図の準備完了 → 3秒後に飛びます';
+
+  // setTimeout: 指定ミリ秒後に1回だけ実行する
+  setTimeout(function () {
+    map.flyTo({
+      center: [-0.0754, 51.5055],  // タワーブリッジ
+      zoom: 16,
+      pitch: 65,
+      bearing: -30,
+      duration: 6000,   // 6秒かけて移動
+      essential: true   // ユーザーが「アニメーションを減らす」設定でも動かす
+    });
+  }, 3000);
+});
+
+
+// --- カメラの動きに反応するイベント ------------------------
+// map.on('イベント名', 処理) で、地図の出来事を捕まえられます。
+
+// 'move' … カメラが少しでも動くたびに発生（1秒に何十回も呼ばれる）
+map.on('move', function () {
+  const c = map.getCenter();   // 今の中心座標を取得
+  const z = map.getZoom();     // 今のズームを取得
+
+  document.getElementById('log').textContent =
+    '経度 ' + c.lng.toFixed(3) +
+    ' / 緯度 ' + c.lat.toFixed(3) +
+    ' / zoom ' + z.toFixed(1) +
+    ' / pitch ' + map.getPitch().toFixed(0);
+});
+
+// 'moveend' … 動きが完全に止まったときに1回だけ発生
+map.on('moveend', function () {
+  console.log('カメラが停止しました');
+});
+
+// 'click' … 地図をクリックしたとき。クリック地点へ寄る例
+map.on('click', function (e) {
+  // e にはイベントの情報が入っています。e.lngLat がクリックした座標。
+  map.easeTo({
+    center: e.lngLat,
+    duration: 1500
+  });
+});
+
+
+// ============================================
+// 【JSの文法メモ】
+//
+// map.on('load', function () { ... })
+//   「loadという出来事が起きたら、この関数を実行して」という予約。
+//   これを「イベントリスナー」「コールバック」と呼びます。
+//   JSで最も重要な考え方です。
+//
+//   コードは上から順に実行されますが、
+//   on(...) の中身は「今すぐ」ではなく「あとで」動きます。
+//   この時間差に慣れることが、JS習得の最初の山です。
+//
+// function () { ... }
+//   名前のない関数。「あとで実行してほしい処理のかたまり」。
+//
+// document.getElementById('log')
+//   id="log" のHTML要素を探して取ってくる。
+//   .textContent = '...' で、その中身の文字を書き換えます。
+//
+// console.log(...)
+//   開発者ツール（F12キー → Console タブ）に出力する。
+//   デバッグの基本道具です。必ず使えるようにしてください。
+//
+// c.lng.toFixed(3)
+//   小数点以下3桁に丸める。数字が持っている命令のひとつ。
+// ============================================
+
+
+// ============================================
+// 【やってみよう】
+//
+// 1. flyTo を easeTo に書き換えて、動きの違いを比べる
+//    （flyTo は一度引いてから飛ぶ。easeTo は最短距離で進む）
+//
+// 2. duration を 1000 と 15000 で比べる
+//
+// 3. flyTo に curve: 2 を足してみる（飛ぶ弧の高さが変わります）
+//
+// 4. map.on('move', ...) の中の処理を console.log('動いた') に変えて、
+//    F12 の Console を開いたまま地図をドラッグする
+//    → 大量に出力されます。moveが「動くたび毎回」の意味だと体感できます。
+//
+// 5. 地図をクリックして、その場所に寄る動きを確かめる
+// ============================================
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1 @@
+{"type":"Feature","properties":{"id":"神戸電鉄_神戸高速線","name":"神戸高速線","operator":"神戸電鉄","railType":"普通鉄道","operatorType":"民営","category":"rail","attribution":"国土数値情報（鉄道データ）国土交通省"},"geometry":{"type":"MultiLineString","coordinates":[[[135.16644,34.67897],[135.16871,34.6769]],[[135.16871,34.6769],[135.16923,34.67634]],[[135.16579,34.67959],[135.16644,34.67897]]]}}

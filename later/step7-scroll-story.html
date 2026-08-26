@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 7 — スクロール連動ストーリーマップ</title>
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: sans-serif; background: #111; }
+
+  /* 地図を画面に固定する。文章だけがスクロールしていく */
+  #map {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100vh;
+    z-index: 0;
+  }
+
+  /* 文章は地図の上に重ねる */
+  #story {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto 0 6vw;   /* 左寄せ。地図の右半分を見せる */
+    padding: 0 0 40vh;
+  }
+
+  .chapter {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+  }
+
+  .card {
+    background: rgba(20,20,20,0.88);
+    color: #f1f3f5;
+    padding: 26px 28px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    backdrop-filter: blur(6px);
+    opacity: 0.25;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  /* 表示中の章だけくっきりさせる */
+  .chapter.active .card { opacity: 1; transform: translateY(0); }
+
+  .card .num { font-size: 12px; letter-spacing: 2px; color: #e8590c; }
+  .card h2 { margin: 6px 0 12px; font-size: 26px; }
+  .card p { margin: 0; font-size: 14px; line-height: 1.9; color: #ced4da; }
+
+  #intro, #outro {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  #intro h1 { color: #fff; font-size: 40px; text-align: center; line-height: 1.4; }
+  #intro span { font-size: 15px; color: #adb5bd; display: block; margin-top: 14px; letter-spacing: 3px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="story">
+
+  <div id="intro">
+    <h1>England, 8 months<span>SCROLL DOWN ↓</span></h1>
+  </div>
+
+  <!-- 各章。data-chapter の番号が、下のJSの chapters と対応します -->
+  <div class="chapter" data-chapter="0">
+    <div class="card">
+      <div class="num">CHAPTER 01</div>
+      <h2>London</h2>
+      <p>ヒースローに降りたのが最初の一歩だった。地下鉄の音、雨の匂い、聞き取れない英語。何もかもが速く流れていた。</p>
+    </div>
+  </div>
+
+  <div class="chapter" data-chapter="1">
+    <div class="card">
+      <div class="num">CHAPTER 02</div>
+      <h2>Brighton</h2>
+      <p>電車で1時間、海が見えた。桟橋の先端まで歩いて、そこで初めて自分から誰かに話しかけた。</p>
+    </div>
+  </div>
+
+  <div class="chapter" data-chapter="2">
+    <div class="card">
+      <div class="num">CHAPTER 03</div>
+      <h2>Bath</h2>
+      <p>石造りの街全体が同じ色をしていた。ローマ人が2000年前に湯を沸かしていた場所に、湯気がまだ立っていた。</p>
+    </div>
+  </div>
+
+  <div class="chapter" data-chapter="3">
+    <div class="card">
+      <div class="num">CHAPTER 04</div>
+      <h2>Oxford</h2>
+      <p>自転車と石壁と、古書店の匂い。誰も急いでいなかった。ここで初めて、英語で冗談が通じた。</p>
+    </div>
+  </div>
+
+  <div class="chapter" data-chapter="4">
+    <div class="card">
+      <div class="num">CHAPTER 05</div>
+      <h2>York</h2>
+      <p>城壁の上を一周した。北へ来るほど言葉が変わっていくのが面白かった。8ヶ月が終わろうとしていた。</p>
+    </div>
+  </div>
+
+  <div id="outro">
+    <h1 style="font-size:28px;">…そして9年後<span>NEXT CHAPTER: 2029</span></h1>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+
+<script>
+// ============================================
+// Step 7: スクロールに連動して地図が動く
+//
+// これが「ストーリーマップ」と呼ばれる表現で、
+// Yutaさんが作りたいものの完成形に最も近い形です。
+// NYT や National Geographic の記事でよく使われています。
+// ============================================
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+// 各章で、カメラをどこに置くか
+const chapters = [
+  { center: [-0.1276, 51.5072], zoom: 13.5, pitch: 55, bearing:  20 },  // London
+  { center: [-0.1372, 50.8225], zoom: 14.5, pitch: 65, bearing: -25 },  // Brighton
+  { center: [-2.3590, 51.3811], zoom: 15.5, pitch: 70, bearing:  35 },  // Bath
+  { center: [-1.2577, 51.7520], zoom: 15,   pitch: 60, bearing: -10 },  // Oxford
+  { center: [-1.0873, 53.9600], zoom: 14.5, pitch: 55, bearing:  15 }   // York
+];
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/standard',
+  center: [-1.8, 52.4],
+  zoom: 5,
+  pitch: 0,
+  interactive: false   // ★ スクロール連動の時は操作を切る（スクロールが奪われるため）
+});
+
+
+// --- IntersectionObserver ---------------------------------
+// 「この要素が画面に入ったら教えて」とブラウザにお願いする仕組みです。
+// スクロール量を自分で計算するより、正確で軽い。
+
+const observer = new IntersectionObserver(function (entries) {
+  // entries には、状態が変化した要素が入ってきます
+  entries.forEach(function (entry) {
+
+    // isIntersecting = 今、指定した範囲に入っているか
+    if (entry.isIntersecting) {
+      const el = entry.target;
+
+      // 見た目：この章だけ active にする
+      document.querySelectorAll('.chapter').forEach(function (c) {
+        c.classList.remove('active');
+      });
+      el.classList.add('active');
+
+      // 地図：対応する章のカメラへ飛ぶ
+      // data-chapter="2" は el.dataset.chapter で '2' として取れます（文字列）
+      const index = Number(el.dataset.chapter);   // 文字列 → 数値に変換
+      const ch = chapters[index];
+
+      map.flyTo({
+        center: ch.center,
+        zoom: ch.zoom,
+        pitch: ch.pitch,
+        bearing: ch.bearing,
+        duration: 3000,
+        essential: true
+      });
+    }
+  });
+}, {
+  // 画面の上下から35%を除いた「真ん中30%」に入ったら反応する
+  rootMargin: '-35% 0px -35% 0px',
+  threshold: 0
+});
+
+// 全ての .chapter を監視対象に登録する
+document.querySelectorAll('.chapter').forEach(function (el) {
+  observer.observe(el);
+});
+
+
+// ============================================
+// 【JSの文法メモ】
+//
+// document.querySelectorAll('.chapter')
+//   CSSと同じ書き方で要素をまとめて探す。
+//   '.chapter' = class="chapter" の要素すべて
+//   '#map'     = id="map" の要素
+//
+// el.dataset.chapter
+//   HTMLの data-chapter="2" を読む書き方。
+//   data-〇〇 は「HTMLに好きな情報を持たせる」ための標準の仕組みです。
+//   ※ 必ず文字列で返るので、数値として使うなら Number(...) が必要。
+//
+// new IntersectionObserver(処理, 設定)
+//   「監視役」を1人作る → observe(要素) で見張る対象を登録する、という流れ。
+//   scroll イベントで自分で計算する方法より、性能・正確さの両面で優れます。
+// ============================================
+
+
+// ============================================
+// 【設計のポイント】
+//
+// 1. interactive: false
+//    地図の上でホイールを回すと、通常は地図がズームしてしまいます。
+//    ストーリーマップではページをスクロールしてほしいので、操作を無効化します。
+//
+// 2. position: fixed の地図 + スクロールする文章
+//    これがストーリーマップの基本構造です。
+//    地図は動かず、文章だけが流れ、地図はカメラだけが変わる。
+//
+// 3. rootMargin で「反応する位置」を調整
+//    -35% にすることで「画面の中央付近に来たら」という自然な挙動になります。
+//    0 のままだと、章が画面の端に少し入っただけで反応してしまいます。
+//
+// 4. duration とスクロール速度
+//    速くスクロールされると flyTo が追いつきません。
+//    実務では duration を短めにするか、途中の章をスキップする処理を足します。
+// ============================================
+
+
+// ============================================
+// 【やってみよう】
+//
+// 1. 章を1つ追加する
+//    HTMLに .chapter を1つコピーして data-chapter="5" にし、
+//    chapters 配列にもカメラ設定を1行足す
+//
+// 2. rootMargin を '0px' に変えて、反応の違いを体感する
+//
+// 3. interactive: true にして、スクロールがどう壊れるか確認する
+//    （壊れ方を知っておくと、なぜ false なのかが腑に落ちます）
+//
+// 4. style を 'mapbox://styles/mapbox/satellite-streets-v12' に変える
+//
+// 5. 【発展】各章に写真を入れる
+//    <div class="card"> の中に <img src="..." style="width:100%;border-radius:8px">
+//    を足すだけです。自分の写真を入れると、一気に「作品」になります。
+// ============================================
+</script>
+
+</body>
+</html>

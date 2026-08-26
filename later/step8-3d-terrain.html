@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 8 — 3D地形・空・時刻の演出</title>
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+  #map { width: 100%; height: 100%; }
+  #panel {
+    position: absolute; top: 12px; left: 12px; z-index: 1;
+    background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 13px;
+  }
+  #panel div { margin-bottom: 8px; }
+  #panel button {
+    padding: 6px 11px; margin-right: 4px; border: 1px solid #ccc;
+    background: #fff; border-radius: 5px; cursor: pointer; font-size: 12px;
+  }
+  #panel button:hover { background: #f1f3f5; }
+  #panel b { display: block; margin-bottom: 5px; font-size: 11px; color: #666; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="panel">
+  <div>
+    <b>時刻（lightPreset）</b>
+    <button data-light="dawn">dawn</button>
+    <button data-light="day">day</button>
+    <button data-light="dusk">dusk</button>
+    <button data-light="night">night</button>
+  </div>
+  <div>
+    <b>場所</b>
+    <button data-go="lake">湖水地方（山）</button>
+    <button data-go="london">ロンドン（3D建物）</button>
+  </div>
+  <div>
+    <b>表示</b>
+    <button data-toggle="label">地名の表示切替</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+
+<script>
+// ============================================
+// Step 8: 3D地形と、Standard スタイルの設定
+//
+// v3 の Standard スタイルは「設定を変えられる地図」です。
+// 時刻・建物・地名などを、コードから切り替えられます。
+// ============================================
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/standard',
+  center: [-3.0886, 54.4609],   // 湖水地方（Lake District）
+  zoom: 12.5,
+  pitch: 72,
+  bearing: -20,
+  antialias: true
+});
+
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+
+map.on('style.load', function () {
+  // ★ 'load' ではなく 'style.load' を使います。
+  //   スタイルの設定変更は、スタイルが読み込まれた直後に行う必要があるためです。
+
+  // --- 8-A: 3D地形（Terrain）-----------------------------
+  //
+  // 地形の起伏データ（標高）は、専用のSourceとして追加します。
+  // raster-dem = 標高を色として持っている特殊なタイル
+
+  map.addSource('mapbox-dem', {
+    type: 'raster-dem',
+    url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+    tileSize: 512,
+    maxzoom: 14
+  });
+
+  // setTerrain で「この標高データを使って地面を立体にして」と指示
+  map.setTerrain({
+    source: 'mapbox-dem',
+    exaggeration: 1.5    // 起伏の誇張。1.0=実際の高さ、1.5=1.5倍に強調
+  });
+
+
+  // --- 8-B: 空（Sky）------------------------------------
+  // 空のレイヤーを足すと、地平線の向こうに空が描かれます。
+
+  map.addLayer({
+    id: 'sky',
+    type: 'sky',
+    paint: {
+      'sky-type': 'atmosphere',
+      'sky-atmosphere-sun': [0.0, 90.0],
+      'sky-atmosphere-sun-intensity': 15
+    }
+  });
+
+
+  // --- 8-C: Standard スタイルの設定を変える ---------------
+  //
+  // setConfigProperty('basemap', 設定名, 値)
+  //
+  // Standard スタイルが持つ主な設定：
+  //   lightPreset      … 'dawn' / 'day' / 'dusk' / 'night'（時刻と光）
+  //   showPointOfInterestLabels … 店舗などのラベル true/false
+  //   showPlaceLabels           … 地名 true/false
+  //   showRoadLabels            … 道路名 true/false
+  //   showTransitLabels         … 駅名 true/false
+  //   show3dObjects             … 3D建物 true/false
+
+  map.setConfigProperty('basemap', 'lightPreset', 'dusk');
+  map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
+});
+
+
+// --- ボタンの処理 -----------------------------------------
+
+// 時刻の切り替え
+document.querySelectorAll('[data-light]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    map.setConfigProperty('basemap', 'lightPreset', btn.dataset.light);
+  });
+});
+
+// 場所の移動
+const places = {
+  lake:   { center: [-3.0886, 54.4609], zoom: 12.5, pitch: 72, bearing: -20 },
+  london: { center: [-0.0754, 51.5055], zoom: 16.5, pitch: 70, bearing:  40 }
+};
+
+document.querySelectorAll('[data-go]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    const p = places[btn.dataset.go];   // オブジェクトから [キー] で取り出す
+    map.flyTo({
+      center: p.center, zoom: p.zoom, pitch: p.pitch, bearing: p.bearing,
+      duration: 5000, essential: true
+    });
+  });
+});
+
+// 地名の表示切替
+let labelsOn = true;
+document.querySelector('[data-toggle="label"]').addEventListener('click', function () {
+  labelsOn = !labelsOn;   // ! は「反対にする」。true ⇄ false
+  map.setConfigProperty('basemap', 'showPlaceLabels', labelsOn);
+  map.setConfigProperty('basemap', 'showRoadLabels', labelsOn);
+});
+
+
+// ============================================
+// 【Mapboxの重要概念：slot】
+//
+// Standard スタイルに自分のレイヤーを足すとき、
+// 「地図のどの層に差し込むか」を slot で指定できます。
+//
+//   map.addLayer({
+//     id: 'my-line',
+//     type: 'line',
+//     slot: 'middle',      // ← ここ
+//     source: 'route',
+//     paint: { 'line-color': '#e8590c' }
+//   });
+//
+//   'bottom' … 道路や建物より下（地面の塗り分けなど）
+//   'middle' … 道路の上、ラベルの下（ルート線など）※迷ったらこれ
+//   'top'    … 一番上（ラベルやアイコン）
+//
+// slot を指定しないと最上部に置かれ、
+// 地名が自分の線に隠れてしまうことがあります。
+// Step 6 のようなカスタムレイヤーを Standard に載せる時は必ず意識してください。
+// ============================================
+
+
+// ============================================
+// 【JSの文法メモ】
+//
+// document.querySelectorAll('[data-light]')
+//   「data-light 属性を持つ要素すべて」を探す書き方。
+//
+// btn.dataset.light
+//   その要素の data-light="dusk" の値（'dusk'）を取り出す。
+//   ボタンごとに関数を書き分けずに済む、実務的なテクニックです。
+//
+// places[btn.dataset.go]
+//   オブジェクトから「変数の中身をキーにして」取り出す書き方。
+//   places.lake とは書けない（キーが実行時に決まるため）ので [ ] を使います。
+//
+// labelsOn = !labelsOn
+//   ! は真偽の反転。true なら false に、false なら true に。
+//   ON/OFF の切り替えの定番。
+// ============================================
+
+
+// ============================================
+// 【やってみよう】
+//
+// 1. exaggeration を 1.0 と 3.0 で見比べる
+//
+// 2. lightPreset を4種類すべて押して、同じ場所の印象の変化を見る
+//    → 「時間帯を変えられる」だけで作品の表現力が大きく上がります
+//
+// 3. ロンドンに飛んで、night にする
+//
+// 4. 【発展】Step 6 のルート線を、このファイルに移植する
+//    addSource / addLayer をコピーし、addLayer に slot: 'middle' を足す
+//    → 地形の上をルートが走る、立体的な旅行マップになります
+// ============================================
+</script>
+
+</body>
+</html>

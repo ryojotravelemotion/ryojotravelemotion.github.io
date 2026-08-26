@@ -1,0 +1,1 @@
+{"type":"Feature","properties":{"id":"名古屋市_上飯田線","name":"上飯田線","operator":"名古屋市","railType":"普通鉄道","operatorType":"公営","category":"rail","attribution":"国土数値情報（鉄道データ）国土交通省"},"geometry":{"type":"MultiLineString","coordinates":[[[136.92968,35.2045],[136.92968,35.20271]],[[136.92973,35.19723],[136.92979,35.19521]],[[136.92968,35.20271],[136.92973,35.19723]]]}}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 2 — マーカーとポップアップ</title>
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 100%; }
+
+  /* 自作マーカー（Step 2-C）用のデザイン */
+  .my-pin {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #e8590c; border: 3px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+
+<script>
+// ============================================
+// Step 2: 地図の上にピンを立てる
+// ============================================
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/light-v11',
+  center: [-0.1276, 51.5072],
+  zoom: 12
+});
+
+
+// --- 2-A: いちばん単純なマーカー -------------------------
+// new mapboxgl.Marker() でピンを1本作り、
+// .setLngLat(...) で場所を決め、
+// .addTo(map) で地図に貼り付けます。
+
+new mapboxgl.Marker()
+  .setLngLat([-0.1276, 51.5072])   // ロンドン中心
+  .addTo(map);
+
+
+// --- 2-B: 色を変えて、クリックで吹き出しを出す -------------
+
+// まず吹き出し（ポップアップ）を作ります。
+const popup = new mapboxgl.Popup({ offset: 30 })
+  .setHTML('<b>Tower Bridge</b><br>1894年完成');
+
+// マーカーを作り、そこにポップアップを結びつけます。
+new mapboxgl.Marker({ color: '#1971c2' })
+  .setLngLat([-0.0754, 51.5055])   // タワーブリッジ
+  .setPopup(popup)                 // ← クリックで popup が開くようになる
+  .addTo(map);
+
+
+// --- 2-C: HTMLで自作したピンを使う -----------------------
+// Mapbox標準のピンではなく、自分でデザインした要素を置けます。
+// 実務ではこちらの方がよく使います（写真をピンにする等）。
+
+// document.createElement('div') で、空の <div> をJSで1個作る
+const el = document.createElement('div');
+// class="my-pin" をつける → 上の <style> のデザインが当たる
+el.className = 'my-pin';
+
+new mapboxgl.Marker({ element: el })
+  .setLngLat([-0.1195, 51.5033])   // ロンドン・アイ
+  .setPopup(new mapboxgl.Popup({ offset: 20 }).setHTML('<b>London Eye</b>'))
+  .addTo(map);
+
+
+// ============================================
+// 【JSの文法メモ】
+//
+// メソッドチェーン
+//   new mapboxgl.Marker()
+//     .setLngLat(...)
+//     .addTo(map);
+//
+//   「.」で命令を数珠つなぎにする書き方です。
+//   setLngLat は処理をしたあと「自分自身」を返すので、
+//   その後ろにさらに「.」で次の命令をつなげられます。
+//   Mapbox のAPIはこの形が多いので、見た目に慣れておくと楽です。
+//
+//   ※ 最後の .addTo(map) を忘れると、作ったのに地図に出ません。
+//     初心者が最もよく詰まる箇所です。
+//
+// new mapboxgl.Marker({ color: '#1971c2' })
+//   カッコの中に { } で設定を渡せます。空 () なら初期設定のまま。
+//
+// document.createElement('div')
+//   document はブラウザが持っている「今開いているページ」そのもの。
+//   createElement で、HTMLの要素をJSから新しく作れます。
+// ============================================
+
+
+// ============================================
+// 【やってみよう】
+//
+// 1. 2-A のマーカーにも .setPopup(...) をつけて、吹き出しを出す
+//
+// 2. .my-pin の background を別の色に変える
+//    さらに border-radius: 50% を 4px にして、四角いピンにしてみる
+//
+// 3. 自分が英国で行った場所の座標を調べて、マーカーを1つ足す
+//    座標の調べ方：Googleマップで右クリック →「35.68, 139.76」のように
+//    緯度,経度 が出ます。Mapboxは順番が逆なので [139.76, 35.68] と入れます。
+//
+// 4. マーカーを8個立てようとしてみる
+//    → 同じコードを8回コピペすることになります。面倒ですよね。
+//      それを解決するのが Step 3 です。
+// ============================================
+</script>
+
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 1 — 地図の設定を知る</title>
+
+<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 100%; }
+
+  /* 画面左上に説明を重ねる小さなパネル */
+  #info {
+    position: absolute; top: 10px; left: 10px; z-index: 1;
+    background: rgba(255,255,255,0.9); padding: 10px 14px; border-radius: 6px;
+    font-family: sans-serif; font-size: 13px; line-height: 1.7;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="info">
+  マウスで動かしてみてください<br>
+  ドラッグ = 移動 / ホイール = ズーム<br>
+  <b>右クリックドラッグ = 傾き・回転</b>
+</div>
+
+<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="config.js"></script>
+
+<script>
+// ============================================
+// Step 1: 地図の設定（オプション）を一通り触る
+// ============================================
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+
+  // --- style: 地図の見た目 -------------------------------
+  // 「どんなデザインの地図か」を指定します。
+  // Mapbox が用意している標準スタイル：
+  //   mapbox://styles/mapbox/standard          … v3の新標準。3D建物つき（省略時のデフォルト）
+  //   mapbox://styles/mapbox/streets-v12       … 定番の道路地図
+  //   mapbox://styles/mapbox/light-v11         … 明るい・情報少なめ（データを載せる時に最適）
+  //   mapbox://styles/mapbox/dark-v11          … 暗い
+  //   mapbox://styles/mapbox/satellite-streets-v12 … 航空写真＋道路名
+  //   mapbox://styles/mapbox/outdoors-v12      … 地形・登山道
+  style: 'mapbox://styles/mapbox/standard',
+
+  // --- カメラの位置 --------------------------------------
+  center: [-0.1276, 51.5072], // [経度, 緯度] ロンドン
+  zoom: 15,                   // 0〜22。大きいほど寄る
+  pitch: 60,                  // 傾き 0〜85度。0=真上から、60=斜めから見下ろす
+  bearing: -20,               // 回転 0〜360度。0=北が上、-20=少し左に回す
+
+  // --- その他 --------------------------------------------
+  antialias: true             // 3D建物の輪郭をなめらかにする
+});
+
+// --- コントロール（地図に付ける部品）-----------------------
+// addControl で、地図の上に操作部品を追加できます。
+
+// 拡大縮小＋コンパスのボタン（右上）
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+// 縮尺バー（左下）
+map.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
+
+// 全画面ボタン（右上）
+map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+
+// 現在地ボタン（右上）… クリックすると位置情報の許可を聞かれます
+map.addControl(new mapboxgl.GeolocateControl({
+  trackUserLocation: true
+}), 'top-right');
+
+
+// ============================================
+// 【Mapboxの重要概念：カメラ】
+//
+// Mapbox では、地図を「カメラで地面を撮影している」と考えます。
+// カメラの状態は次の4つで決まります。
+//
+//   center  … カメラがどこを向いているか（地図の中心）
+//   zoom    … どれだけ寄っているか
+//   pitch   … どれだけ傾いているか（0=真上、85=ほぼ水平）
+//   bearing … どれだけ回っているか（0=北が上）
+//
+// この4つを「時間をかけて変化させる」と、
+// それがそのまま地図のアニメーションになります。→ Step 4
+// ============================================
+
+
+// ============================================
+// 【やってみよう】
+//
+// 1. style を 'mapbox://styles/mapbox/satellite-streets-v12' に変えてみる
+//
+// 2. pitch を 0 と 85 で見比べる
+//
+// 3. style を standard のまま zoom を 16、pitch を 70 にして、
+//    ロンドンの建物が3Dで立ち上がるのを確認する
+//    （standard スタイルは3D建物が最初から入っています）
+//
+// 4. addControl の行を1つコメントアウト（行頭に // をつける）して、
+//    そのボタンが消えることを確認する
+// ============================================
+</script>
+
+</body>
+</html>

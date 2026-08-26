@@ -1,0 +1,1 @@
+{"type":"Feature","properties":{"id":"能勢電鉄_鋼索線","name":"鋼索線","operator":"能勢電鉄","railType":"鋼索鉄道","operatorType":"民営","category":"cable","attribution":"国土数値情報（鉄道データ）国土交通省"},"geometry":{"type":"MultiLineString","coordinates":[[[135.45157,34.92194],[135.45076,34.92167]],[[135.45728,34.92389],[135.45655,34.92363]],[[135.45655,34.92363],[135.45157,34.92194]]]}}
