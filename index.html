@@ -53,8 +53,15 @@ button { cursor: pointer; }
 button:disabled { opacity: .4; cursor: not-allowed; }
 
 #app { display: flex; height: 100%; }
+/* 左パネルは全体で1つの巻物にする。
+
+   以前は一覧だけが巻物で、その上下は固定だった。
+   だが固定の部分（題字・案内・検索欄・道具・出典）を足すと
+   画面の低いパソコンでは一覧に21pxしか残らず、カード1枚（345px）も出せなかった。
+   全体を流す形にすれば、どの画面でも中身が読める。 */
 #side { width: 348px; flex: none; background: var(--panel);
-  border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  border-right: 1px solid var(--line); display: flex; flex-direction: column;
+  overflow-y: auto; }
 #mapWrap { flex: 1; position: relative; background: #e6e1d6; }
 #map { position: absolute; inset: 0; transition: opacity 1.15s ease; }
 body.mode-story #side { display: none; }
@@ -78,6 +85,7 @@ body.mode-story #side { display: none; }
 #guide .sub { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.7; }
 
 #searchBox { padding: 11px 10px 0; }
+body.has-spots #searchBox { padding: 12px 10px 11px; }
 #q { width: 100%; padding: 10px 11px; font-size: 12.5px; background: var(--card);
   border: 1px solid var(--line); border-radius: 7px; color: var(--text); }
 #q:focus { outline: none; border-color: var(--accent);
@@ -102,21 +110,28 @@ body.mode-story #side { display: none; }
 .qr .tag { font-size: 9.5px; color: #fff; background: var(--accent);
   padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
 
-#listWrap { flex: 1; overflow-y: auto; padding: 10px; }
-/* 一覧の末尾に出す「次はここを探す」の案内。
-   番号を出しておくと、いま何番目を作っているのかが分かる。 */
-#nextSpot { display: none; width: 100%; margin: 10px 0 4px; padding: 11px 10px;
-  background: var(--card); border: 1px dashed var(--line); border-radius: 4px;
-  color: var(--muted); font-size: 12px; font-family: inherit; cursor: pointer;
-  align-items: center; justify-content: center; gap: 9px; }
-body.has-spots #nextSpot { display: flex; }
-body.mode-story #nextSpot { display: none; }
-#nextSpot:hover { border-color: var(--accent); color: var(--accent-d);
-  border-style: solid; }
-#nextSpot .no { flex: none; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--line2); color: var(--muted); font-size: 11px;
+#listWrap { flex: none; padding: 10px; }
+/* 検索欄の位置を入れ替える。
+   何も無いあいだは一覧の上（出発地を探すのが主役）、
+   1つでも追加されたら一覧の下（次を足していく作業になる）。 */
+#brand    { order: 1; }
+#introSteps { order: 2; }
+#guide    { order: 3; }
+#searchBox { order: 4; }
+#listWrap { order: 5; }
+#adSlot   { order: 7; }
+#tools    { order: 8; }
+#credits  { order: 9; }
+body.has-spots #searchBox { order: 6; border-top: 1px solid var(--line); }
+
+/* 「② 次の場所を検索」の見出し。何番目を作っているのかを示す。
+   場所がまだ無いあいだは出さない（そのときは案内文が別に出ている）。 */
+#searchBox .nextHead { display: none; align-items: center; gap: 9px;
+  padding: 2px 2px 9px; font-size: 12px; color: var(--accent-d); font-weight: 600; }
+body.has-spots #searchBox .nextHead { display: flex; }
+#searchBox .nextHead .no { flex: none; width: 21px; height: 21px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 400;
   display: flex; align-items: center; justify-content: center; }
-#nextSpot:hover .no { background: var(--accent); color: #fff; }
 
 #empty { color: var(--muted); font-size: 11.5px; text-align: center;
   padding: 26px 12px; line-height: 1.9; border: 1px dashed var(--line);
@@ -208,7 +223,7 @@ body.mode-story #nextSpot { display: none; }
   padding: 8px 10px; border-radius: 3px; margin-bottom: 7px; }
 .edit .tip b { color: var(--accent-d); }
 
-#tools { padding: 11px; border-top: 1px solid var(--line); display: grid; gap: 6px;
+#tools { padding: 10px 11px; border-top: 1px solid var(--line); display: grid; gap: 5px;
   background: #f7f3ea; }
 .btn { padding: 10px; font-size: 13px; border: 1px solid var(--line);
   background: var(--card); color: var(--text); border-radius: 7px; }
@@ -563,8 +578,8 @@ body.opening-wait #opening { opacity: 1; }
   font-size: 11px; letter-spacing: 2px; color: var(--muted); }
 
 /* 出典。目立たせる必要はないが、押さなくても読める場所に置く。 */
-#credits { padding: 14px 16px 20px; border-top: 1px solid var(--line2);
-  font-size: 9.5px; line-height: 2; color: #a6b0b8; letter-spacing: .3px; }
+#credits { padding: 11px 16px 16px; border-top: 1px solid var(--line2);
+  font-size: 9.5px; line-height: 1.75; color: #a6b0b8; letter-spacing: .3px; }
 #credits b { font-weight: 600; color: #8b969f; }
 
 #introCard { position: fixed; right: 4vw; bottom: 4vh; z-index: 61;
@@ -794,7 +809,15 @@ body.odpt-open #odptPanel { display: flex; }
       <div class="sub"></div>
     </div>
 
+    <!-- 検索欄は、まだ何も無いときは一覧の上、
+         1つでも追加されたら一覧の下へ移す（CSSの order で入れ替える）。
+
+         出発地を探しているあいだは検索が主役だが、
+         追加した後は「次はどこへ行ったか」を足していく作業になる。
+         そのとき一覧の上に検索欄があると、
+         いま何番目を作っているのかが分かりにくかった。 -->
     <div id="searchBox">
+      <div class="nextHead"><span class="no"></span>次の場所を検索</div>
       <input id="q" type="text" placeholder="場所を検索（例：東京駅）" autocomplete="off">
       <div id="qState"></div>
       <div id="qResults"></div>
@@ -803,10 +826,6 @@ body.odpt-open #odptPanel { display: flex; }
     <div id="listWrap">
       <div id="list"></div>
       <div id="empty">まだ何も追加されていません<br>上の検索欄から、旅の出発地を探してください</div>
-
-      <!-- 一覧の末尾に「次は何番目を探すのか」を示す。
-           検索欄は上にあるので、押すとそこへ案内する。 -->
-      <button id="nextSpot"><span class="no"></span>次の場所を検索</button>
     </div>
 
     <div id="adSlot">
@@ -2946,7 +2965,7 @@ function renderList() {
   const box = $('#list');
   box.innerHTML = '';
   $('#empty').style.display = spots.length ? 'none' : 'block';
-  $('#nextSpot .no').textContent = String(spots.length + 1);
+  $('#searchBox .nextHead .no').textContent = String(spots.length + 1);
 
   spots.forEach(function (s, i) {
     if (i > 0) {
@@ -3286,7 +3305,7 @@ function buildEditForm(s, index) {
         (armedVia === s.id
           ? '<div class="picking">' +
               '<b>' + (isRail(s.mode) ? stationRole(viaList(s).length) : '経由地') + 'を選んでいます</b>' +
-              '<span>上の検索欄で駅名を入れるか、地図をクリック</span>' +
+              '<span>下の検索欄で駅名を入れるか、地図をクリック</span>' +
               '<button data-act="donevia">完了</button>' +
             '</div>'
           : '<div class="viaRow">' +
@@ -3562,6 +3581,7 @@ function focusNewItem() {
   const target = card.querySelector('[data-f=mode]') || card.querySelector('[data-f=date]');
   if (target) target.focus();
 }
+
 
 const SEARCH_WAIT = 500;
 let searchTimer = null;
@@ -3846,14 +3866,6 @@ let prepSkipped = false;
 $('#skipBtn').addEventListener('click', function () { prepSkipped = true; });
 $('#mapFailRetry').addEventListener('click', function () { location.reload(); });
 
-// 一覧の末尾から、上の検索欄へ案内する
-$('#nextSpot').addEventListener('click', function () {
-  selectedId = null;
-  renderList();
-  const q = $('#q');
-  q.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  q.focus();
-});
 
 function setPrep(msg, n, total) {
   $('#prep .st').textContent = msg;
