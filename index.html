@@ -59,10 +59,10 @@ button:disabled { opacity: .4; cursor: not-allowed; }
    だが固定の部分（題字・案内・検索欄・道具・出典）を足すと
    画面の低いパソコンでは一覧に21pxしか残らず、カード1枚（345px）も出せなかった。
    全体を流す形にすれば、どの画面でも中身が読める。 */
-#side { width: 348px; flex: none; background: var(--panel);
+#side { width: clamp(300px, 26vw, 420px); flex: none; background: var(--panel);
   border-right: 1px solid var(--line); display: flex; flex-direction: column;
   overflow-y: auto; }
-#mapWrap { flex: 1; position: relative; background: #e6e1d6; }
+#mapWrap { flex: 1; position: relative; background: #e6e1d6; min-width: 0; min-height: 0; }
 #map { position: absolute; inset: 0; transition: opacity 1.15s ease; }
 body.mode-story #side { display: none; }
 
@@ -358,13 +358,48 @@ select.btn { appearance: none; -webkit-appearance: none; padding-right: 22px;
   background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
 select.btn option { background: var(--card); color: var(--text); }
 
-@media (max-width: 900px) {
-  
-  
-  
-  
-  
-  
+/* ---------------------------------------------------------------------------
+   横に置くか、上に置くか
+
+   左に置いたままだと、窓が細くなるにつれて地図が縦長になっていく。
+   地図が縦長になると、旅の経路（たいてい横に長い）が small く収まってしまう。
+
+   そこで地図が縦長になる手前で、パネルを上へ移す。
+
+   切り替えの目安は窓の縦横比。パネルの幅はおよそ 26vw なので、
+   地図の幅は 0.74vw ほど。これが窓の高さを下回るのは vw / vh が 1.35 を切るあたり。
+   少し手前の 1.4 で切り替える。
+   --------------------------------------------------------------------------- */
+@media (max-aspect-ratio: 7/5) {
+  #app { flex-direction: column; }
+
+  #side { width: 100%; max-height: 46vh; flex: none;
+    border-right: 0; border-bottom: 1px solid var(--line); }
+
+  /* 上に来たら横長になるので、題字と副題と旅の名前を一列に並べる */
+  #brand { display: flex; align-items: center; gap: 14px;
+    padding: 11px 14px; flex-wrap: wrap; }
+  #brand h1 { margin: 0; }
+  #brand p { margin: 0; flex: none; }
+  #brand #tripName { flex: 1; min-width: 180px; margin: 0; }
+
+  /* 出典も一列に流す */
+  #credits { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 9px 14px 12px; }
+
+  /* オープニング中は題字を大きく見せているが、
+     上に置くと縦に場所を取りすぎるので控えめにする */
+  body.intro #brand { padding: 14px 16px 12px; }
+  body.intro #brand h1 { font-size: 26px; letter-spacing: 8px; text-indent: 8px;
+    margin-bottom: 0; }
+  body.intro #brand p { font-size: 10.5px; letter-spacing: 2px; }
+  body.intro #side { max-height: 52vh; }
+}
+
+/* 窓がとても低いとき（横長のノートパソコンなど）は、
+   上に置いてもパネルが場所を取りすぎないようにする */
+@media (max-aspect-ratio: 7/5) and (max-height: 620px) {
+  #side { max-height: 54vh; }
+  body.intro #side { max-height: 60vh; }
 }
 #introSteps { display: none; padding: 14px 14px 4px; border-bottom: 1px solid var(--line);
   background: linear-gradient(#fdfcf8, #f7f3ea); }
