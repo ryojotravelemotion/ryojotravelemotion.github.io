@@ -1,5 +1,5 @@
 /*
- * 冒頭デモの道路の経路を、あらかじめ計算して保存する
+ * 冒頭デモの道路の経路と、写真の在り処を、あらかじめ調べて保存する
  *
  * 使い方:
  *   ブラウザで index.html を開き、開発者ツールのコンソールに
@@ -22,7 +22,10 @@
  * しかもこの2回は、何もせず去っていく人のぶんも消費する。
  * 訪問者の大半は何もせず離脱するので、ここが一番の無駄だった。
  *
- * 一度計算して保存してしまえば、以後ゼロになる。
+ * 写真も同じで、開くたびにWikipediaへ7回（地点の数だけ）問い合わせていた。
+ * 写真そのものは変わらないので、毎回探す必要がない。
+ *
+ * 一度調べて保存してしまえば、以後ゼロになる。
  * 通信が減るぶん、冒頭デモの表示も速くなる。
  *
  * ---------------------------------------------------------------------------
@@ -110,16 +113,35 @@
                 raw.length + '点 → ' + small.length + '点');
   }
 
+  // --- 写真の在り処を調べる
+  const images = {};
+  for (let i = 0; i < INTRO_SPOTS.length; i++) {
+    const s = INTRO_SPOTS[i];
+    try {
+      const hit = await wikiByName(s.wiki);
+      if (hit && hit.url) {
+        images[s.name] = hit.url;
+        console.log(s.name + ' の写真: ' + (hit.title || '(題名なし)'));
+      } else {
+        console.log(s.name + ' の写真: 見つからず');
+      }
+    } catch (err) {
+      console.log(s.name + ' の写真: 取得に失敗 ' + err.message);
+    }
+  }
+
   const out = {
-    source: 'Mapbox Directions API',
+    source: 'Mapbox Directions API / Wikipedia',
     note: '冒頭デモの道路経路。INTRO_SPOTS の座標を変えたら作り直すこと。',
     tolerance_m: TOLERANCE_M,
     generated: new Date().toISOString().slice(0, 10),
-    legs: legs
+    legs: legs,
+    images: images
   };
 
   const text = JSON.stringify(out);
-  console.log('合計 ' + before + '点 → ' + after + '点 / ' +
+  console.log('経路 合計 ' + before + '点 → ' + after + '点');
+  console.log('写真 ' + Object.keys(images).length + ' 件 / ファイル ' +
               Math.round(text.length / 1024) + ' KB');
 
   const blob = new Blob([text], { type: 'application/json' });

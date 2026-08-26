@@ -529,6 +529,18 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
 #introSteps .opener:hover { border-color: var(--accent); color: var(--accent-d); }
 #introSteps .note { font-size: 10px; color: #9aa5ae; line-height: 1.85; padding: 10px 2px 6px; }
 
+/* オープニングの読み込み中に出す案内。
+   地図の上に静かに置く。消えるときは、ふっと薄くなる。 */
+#opening { position: absolute; inset: 0; z-index: 4; display: flex;
+  align-items: center; justify-content: center; pointer-events: none;
+  opacity: 0; transition: opacity .45s ease; }
+body.opening-wait #opening { opacity: 1; }
+/* 航空写真の上に文字を直に置くと読めないので、紙を1枚敷く */
+#opening span { background: rgba(251, 248, 242, .93); border: 1px solid var(--line);
+  border-radius: 3px; box-shadow: var(--shadow); max-width: 80%;
+  padding: 11px 22px; text-align: center; line-height: 1.8;
+  font-size: 11px; letter-spacing: 2px; color: var(--muted); }
+
 /* 出典。目立たせる必要はないが、押さなくても読める場所に置く。 */
 #credits { padding: 14px 16px 20px; border-top: 1px solid var(--line2);
   font-size: 9.5px; line-height: 2; color: #a6b0b8; letter-spacing: .3px; }
@@ -744,7 +756,7 @@ body.odpt-open #odptPanel { display: flex; }
         <text class="tr v6 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚲</text>
       </svg>
 
-      <div class="note">いま地図に流れているのは、札幌から那覇まで日本を縦断した9日間の記録です。
+      <div class="note">いま地図に流れているのは、札幌から那覇まで日本を縦断した旅の記録です。
         鉄道・フェリー・バス・車・飛行機を乗り継いでいます。鉄道は実際の線路を、
         車は実際の道路を、船は実際の定期航路をたどり、飛行機は地球の丸みに沿った
         最短の経路を通ります。<br><br>
@@ -816,6 +828,11 @@ body.odpt-open #odptPanel { display: flex; }
     <div id="mapEmpty">
       <div>まだ場所がありません<br>左の検索欄で駅や地名を探すと、ここにピンが立ちます</div>
     </div>
+
+    <!-- 地図の画像が届くのを待っているあいだ。
+         待たずに動かすと粗いまま札幌へ寄っていくので待つのだが、
+         何も出ないと固まったように見えるため、待っていることを伝える。 -->
+    <div id="opening"><span>オープニングを読み込んでいます</span></div>
 
     <div id="topbar">
       <div class="ttl"></div>
@@ -2452,10 +2469,20 @@ async function decodeAhead(url) {
 }
 
 async function loadIntroImages() {
+  await loadIntroLegs();      // 保存してある写真の在り処もここで読む
+
   for (let i = 0; i < INTRO_SPOTS.length; i++) {
     const s = INTRO_SPOTS[i];
     if (introImages[s.name] !== undefined) continue;
+
     try {
+      // 保存してある在り処をまず試す。Wikipediaへ聞きに行かずに済む。
+      const saved = introImageUrls[s.name];
+      if (saved) {
+        const ok = await decodeAhead(saved);
+        if (ok) { introImages[s.name] = ok; continue; }
+        // 写真が差し替えられていた場合はここに来る。そのときだけ聞きに行く。
+      }
       const hit = await wikiByName(s.wiki);
       introImages[s.name] = hit ? await decodeAhead(hit.url) : null;
     } catch (err) {
@@ -2536,6 +2563,11 @@ let introLegs = [];
    座標を変えたら tools/build-intro-legs.js を流し直すこと。 */
 let introLegsLoaded = false;
 
+/* 冒頭デモの写真の在り処も、同じ理由で保存してある。
+   以前は開くたびにWikipediaへ7回（地点の数だけ）問い合わせていた。
+   写真そのものは変わらないので、毎回探す必要がない。 */
+const introImageUrls = {};
+
 async function loadIntroLegs() {
   if (introLegsLoaded) return;
   introLegsLoaded = true;
@@ -2546,8 +2578,11 @@ async function loadIntroLegs() {
     Object.keys(json.legs || {}).forEach(function (k) {
       if (!legCache[k]) legCache[k] = json.legs[k];
     });
+    Object.keys(json.images || {}).forEach(function (k) {
+      introImageUrls[k] = json.images[k];
+    });
   } catch (err) {
-    console.warn('冒頭デモの保存済み経路を読めませんでした', err);
+    console.warn('冒頭デモの保存済みデータを読めませんでした', err);
   }
 }
 
@@ -2597,8 +2632,12 @@ function introBounds() {
 async function runIntro(my) {
   /* 開いた直後は、地図の画像がまだ届いていない。
      そのまま動き出すと、粗いモザイクのまま札幌へ寄っていくことになる。
-     いま画面に要る画像が出そろうまで待ってから動き始める。 */
+     いま画面に要る画像が出そろうまで待ってから動き始める。
+
+     待っているあいだは、そう伝える。何も出ないと固まったように見えるため。 */
+  document.body.classList.add('opening-wait');
   await untilFirstIdle(9000);
+  document.body.classList.remove('opening-wait');
   if (!introOn || my !== introSeq) return;
 
   // 線路をたどる経路は取得に少しかかる。出来上がるまで全体像を見せておく。
