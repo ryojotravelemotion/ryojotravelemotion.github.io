@@ -108,21 +108,28 @@
     legs[k] = small;
   });
 
-  // --- 写真の在り処を調べる
+  /* --- 写真の在り処を調べる
+
+     地点ごとに数枚ずつ。INTRO_SPOTS の wiki に並べた順が、
+     そのままカードでの並び順（先頭が代表の1枚）になる。 */
   const images = {};
   for (let i = 0; i < INTRO_SPOTS.length; i++) {
     const s = INTRO_SPOTS[i];
-    try {
-      const hit = await wikiByName(s.wiki);
-      if (hit && hit.url) {
-        images[s.name] = hit.url;
-        console.log(s.name + ' の写真: ' + (hit.title || '(題名なし)'));
-      } else {
-        console.log(s.name + ' の写真: 見つからず');
+    const wanted = Array.isArray(s.wiki) ? s.wiki : [s.wiki];
+    const got = [], titles = [];
+
+    for (let k = 0; k < wanted.length; k++) {
+      try {
+        const hit = await wikiByName(wanted[k]);
+        if (hit && hit.url) { got.push(hit.url); titles.push(hit.title || wanted[k]); }
+        else titles.push(wanted[k] + '（見つからず）');
+      } catch (err) {
+        titles.push(wanted[k] + '（失敗）');
       }
-    } catch (err) {
-      console.log(s.name + ' の写真: 取得に失敗 ' + err.message);
     }
+
+    images[s.name] = got;
+    console.log(s.name + ' の写真 ' + got.length + '枚: ' + titles.join(' / '));
   }
 
   const out = {

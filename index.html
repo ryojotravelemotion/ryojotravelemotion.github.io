@@ -672,7 +672,22 @@ body.opening-wait #opening { opacity: 1; }
 #introCard .frame { background: rgba(245,241,232,.95); padding: 9px;
   border: 1px solid rgba(255,255,255,.5); border-radius: 2px;
   box-shadow: 0 18px 50px rgba(6,12,18,.6); }
-#introCard img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 1px; }
+/* 代表の1枚。縦に伸びすぎないよう、少し横長にしている。
+   本文も長くなったので、写真で場所を取りすぎると読む前に消えてしまう。 */
+#introCard .lead { width: 100%; aspect-ratio: 3 / 2; object-fit: cover;
+  display: block; border-radius: 1px; }
+
+/* 残りの写真は下に小さく並べる。Googleマップの口コミと同じ並べ方。
+
+   3列に決め打ちしているのは、枚数で大きさが変わらないようにするため。
+   幅を等分にすると、1枚だけのときに横いっぱいまで広がって、
+   代表の写真より大きくなってしまう。 */
+#introCard .strip { display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 4px; margin-top: 4px; }
+#introCard .strip:empty { display: none; }
+#introCard .strip img { width: 100%; aspect-ratio: 1 / 1;
+  object-fit: cover; display: block; border-radius: 1px; }
+
 #introCard .dt { font-size: 10px; letter-spacing: 2px; color: var(--muted);
   padding: 10px 2px 0; text-align: center; }
 #introCard .nm { margin-top: 4px; font-size: 17px; letter-spacing: 5px; color: var(--text);
@@ -681,9 +696,40 @@ body.opening-wait #opening { opacity: 1; }
   color: #33445a; }
 #introCard .wy { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(27,42,65,.12);
   font-size: 10px; letter-spacing: 1px; color: var(--accent-d); text-align: center; }
-@media (max-width: 900px) {
-  #introCard { width: clamp(150px, 34vw, 220px); right: 3vw; bottom: auto; top: 3vh; }
-  #introCard .nm { font-size: 12.5px; letter-spacing: 2px; }
+/* パネルが上に来ているとき、カードは地図の上に置く。
+
+   縦置きのままだと地図の高さに収まらないので、横に組み替える。
+   左に写真、右に文章。地図が横長で低いので、この形のほうが収まりがよい。
+   （上に貼りつける指定のままだと、上のパネルに重なってしまう） */
+@media (max-aspect-ratio: 7/5) {
+  /* 上限は地図の実際の高さから決める（--mapH は JS が測って渡している）。
+     読み込み前など値が無いときのために 36vh を控えに置いてある。 */
+  #introCard { width: clamp(300px, 62vw, 540px);
+    right: 2vw; bottom: 2vh; top: auto;
+    max-height: calc(var(--mapH, 36vh) - 26px); }
+  #introCard .frame { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 5fr);
+    gap: 10px; align-items: start; max-height: inherit; overflow: hidden; }
+
+  /* 写真は左の列にまとめる。地図が低いので、縦を食わない形にする。 */
+  #introCard .lead { grid-column: 1; aspect-ratio: 2 / 1; }
+  #introCard .strip { grid-column: 1; grid-template-columns: repeat(4, 1fr); }
+
+  /* 文字は右の列に縦に積む */
+  #introCard .dt { grid-column: 2; grid-row: 1; padding: 0 0 0 2px; text-align: left;
+    align-self: start; }
+  #introCard .nm { grid-column: 2; grid-row: 1; margin-top: 15px; text-align: left;
+    font-size: 15px; letter-spacing: 3px; }
+  #introCard .tx { grid-column: 2; grid-row: 2; margin-top: 0; padding: 0 0 0 2px;
+    font-size: 10.5px; line-height: 1.8; }
+  #introCard .wy { grid-column: 2; grid-row: 3; margin-top: 6px; padding-top: 6px;
+    text-align: left; }
+}
+
+/* 画面がとても狭いときは、写真の列を細くして文字の場所を確保する */
+@media (max-aspect-ratio: 7/5) and (max-width: 520px) {
+  #introCard { width: 92vw; right: 4vw; }
+  #introCard .frame { grid-template-columns: minmax(0, 3fr) minmax(0, 5fr); }
+  #introCard .nm { font-size: 13px; letter-spacing: 2px; }
 }
 
 #prep { position: fixed; inset: 0; z-index: 55; background: rgba(245,241,232,.97);
@@ -994,7 +1040,8 @@ body.odpt-open #odptPanel { display: flex; }
 
 <div id="introCard">
   <div class="frame">
-    <img alt="">
+    <img class="lead" alt="">
+    <div class="strip"></div>
     <div class="dt"></div>
     <div class="nm"></div>
     <div class="tx"></div>
@@ -2544,9 +2591,10 @@ function flyAlong(coords, duration, o) {
    --------------------------------------------------------------------------- */
 
 const INTRO_SPOTS = [
-  { name: '札幌', wiki: '札幌市時計台', coord: [141.3507, 43.0687],
+  { name: '札幌', wiki: ['札幌市時計台', '大通公園', 'すすきの'], coord: [141.3507, 43.0687],
     date: '2026年8月1日', mode: 'railTrack', via: [],
-    note: '朝いちばんの札幌駅。ここから南へ、二千キロ。',
+    note: '朝いちばんの札幌駅。まだ人のまばらな改札を抜けて、南へ向かう列車に乗った。'
+        + 'ここから那覇まで二千キロ。地図の上では、ただの一本の線になる。',
     zoom: 15.2, pitch: 60, bearing: 20 },
 
   /* 函館線 → 千歳線 → 室蘭線。経由地は路線どうしが実際に接する点。
@@ -2555,49 +2603,63 @@ const INTRO_SPOTS = [
      最後の苫小牧駅→フェリーターミナルの3.4kmだけは線路が無いので直線になる。
      実際にもここはバスで移動する区間で、
      起動時に「区間 4 の線路をたどれませんでした」と出るのはそのため。異常ではない。 */
-  { name: '苫小牧港', wiki: '苫小牧港', coord: [141.6365, 42.6377],
+  { name: '苫小牧港', wiki: ['苫小牧港', '苫小牧市'], coord: [141.6365, 42.6377],
     date: '2026年8月1日', mode: 'railTrack',
     via: [ { c: [141.4372, 43.0472], n: '白石' },
            { c: [141.6930, 42.6720], n: '沼ノ端' },
            { c: [141.5958, 42.6393], n: '苫小牧' } ],
-    note: '千歳線で南下。夕方の港で、船を待つ。',
+    note: '千歳線で南へ二時間。苫小牧の駅からフェリーターミナルまではバスに乗り換える。'
+        + '夕方の港は貨物の匂いがして、乗船を待つ車の列が長かった。',
     zoom: 14.4, pitch: 56, bearing: 160 },
 
   /* 太平洋を南下する実際の航路。
      以前は沖合に7つの経由地を手で置いていたが、
      いまは OpenStreetMap の航路（商船三井さんふらわあ 大洗〜苫小牧）を
      そのままたどるので、経由地は要らない。741.8km・226点。 */
-  { name: '大洗港', wiki: '大洗港', coord: [140.5723, 36.3086],
+  { name: '大洗港', wiki: ['大洗港', '大洗磯前神社'], coord: [140.5723, 36.3086],
     date: '2026年8月2日', mode: 'ferry', via: [],
-    note: '船で一晩。甲板に出ると、陸の灯りが遠かった。',
+    note: '船で一晩かけて太平洋を南下する。'
+        + '夜中に甲板へ出ると、陸の灯りはもうずいぶん遠く、'
+        + '波の音だけがずっと続いていた。朝、大洗の港に着いた。',
     zoom: 13.6, pitch: 52, bearing: 240 },
 
-  { name: '東京', wiki: '東京駅', coord: [139.7671, 35.6812],
+  { name: '東京', wiki: ['東京駅', '丸の内'], coord: [139.7671, 35.6812],
     date: '2026年8月2日', mode: 'transit', via: [],
-    note: 'バスで都心へ。赤煉瓦の駅舎に着いた。',
+    note: '大洗からバスで都心へ。'
+        + '海沿いの町から高速に乗ると、景色が少しずつ建物に変わっていく。'
+        + '赤煉瓦の駅舎に着いたころには、もう昼を回っていた。',
     zoom: 15.4, pitch: 62, bearing: 140 },
 
-  { name: '大阪', wiki: '大阪城', coord: [135.5259, 34.6873],
+  { name: '大阪', wiki: ['大阪城', '道頓堀'], coord: [135.5259, 34.6873],
     date: '2026年8月5日', mode: 'railTrack',
     via: [ { c: [135.5000, 34.7336], n: '新大阪' } ],
-    note: '東海道新幹線で二時間半。天守閣は思っていたより白い。',
+    note: '東海道新幹線で二時間半。'
+        + '窓の外を富士山が過ぎて、気がつけば景色は関西のものになっていた。'
+        + '大阪城の天守閣は、思っていたよりずっと白い。',
     zoom: 15.0, pitch: 60, bearing: 300 },
 
-  { name: '広島', wiki: '原爆ドーム', coord: [132.4536, 34.3955],
+  { name: '広島', wiki: ['原爆ドーム', '広島平和記念公園'], coord: [132.4536, 34.3955],
     date: '2026年8月7日', mode: 'driving', via: [],
-    note: '車で山陽路を西へ。日が傾くころに着いた。',
+    note: '車を借りて山陽路を西へ。'
+        + '瀬戸内の海が右手に見えたり隠れたりを繰り返す。'
+        + '日が傾くころ広島に着いて、川沿いをしばらく歩いた。',
     zoom: 15.6, pitch: 58, bearing: 60 },
 
-  { name: '那覇', wiki: '首里城', coord: [127.7195, 26.2170],
+  { name: '那覇', wiki: ['首里城', '国際通り (那覇市)'], coord: [127.7195, 26.2170],
     date: '2026年8月9日', mode: 'flight', via: [],
-    note: '空から見た海の色が、本州とはまるで違った。ここが終点。',
+    note: '広島空港から那覇へ飛ぶ。'
+        + '雲の切れ間から見えた海の色が、本州のそれとはまるで違っていた。'
+        + '首里城の石垣に着いて、この旅はここで終わる。',
     zoom: 15.2, pitch: 60, bearing: 210 }
 ];
 
 const INTRO_OVERVIEW = 1800;
 const INTRO_OVERVIEW_HOLD = 500;
 const INTRO_IN = 4200;
-const INTRO_HOLD = 3600;
+/* 地点に着いてから離れるまでの時間。
+   本文を3行ほどに増やしたので、読み終わる前に消えないよう長くしてある。
+   1地点あたり1.6秒延びるので、一周は約11秒長くなる。 */
+const INTRO_HOLD = 5200;
 const INTRO_OUT = 800;
 const INTRO_LEG = 7200;
 const INTRO_LEG_MAX = 10500;
@@ -2672,6 +2734,11 @@ async function decodeAhead(url) {
   });
 }
 
+/* 地点ごとに写真を数枚そろえる。
+
+   1枚だけだと、その場所がどんな所だったのかが伝わりにくい。
+   Googleマップの口コミのように、代表の1枚と、その下に小さく数枚並べる。
+   どの写真を出すかは INTRO_SPOTS の wiki に並べた順で決まる。 */
 async function loadIntroImages() {
   await loadIntroLegs();      // 保存してある写真の在り処もここで読む
 
@@ -2679,25 +2746,34 @@ async function loadIntroImages() {
     const s = INTRO_SPOTS[i];
     if (introImages[s.name] !== undefined) continue;
 
-    try {
-      // 保存してある在り処をまず試す。Wikipediaへ聞きに行かずに済む。
-      const saved = introImageUrls[s.name];
-      if (saved) {
-        const ok = await decodeAhead(saved);
-        if (ok) { introImages[s.name] = ok; continue; }
-        // 写真が差し替えられていた場合はここに来る。そのときだけ聞きに行く。
+    const wanted = Array.isArray(s.wiki) ? s.wiki : [s.wiki];
+    const saved = introImageUrls[s.name] || [];
+    const got = [];
+
+    for (let k = 0; k < wanted.length; k++) {
+      try {
+        // 保存してある在り処をまず試す。Wikipediaへ聞きに行かずに済む。
+        if (saved[k]) {
+          const ok = await decodeAhead(saved[k]);
+          if (ok) { got.push(ok); continue; }
+          // 写真が差し替えられていた場合はここに来る。そのときだけ聞きに行く。
+        }
+        const hit = await wikiByName(wanted[k]);
+        const url = hit ? await decodeAhead(hit.url) : null;
+        if (url) got.push(url);
+      } catch (err) {
+        // この1枚は諦めて次へ。数枚のうち1枚欠けても困らない。
       }
-      const hit = await wikiByName(s.wiki);
-      introImages[s.name] = hit ? await decodeAhead(hit.url) : null;
-    } catch (err) {
-      introImages[s.name] = null;
     }
+
+    introImages[s.name] = got;
   }
 }
 
 function showIntroCard(s, i) {
   const box = $('#introCard');
-  const url = introImages[s.name];
+  const urls = introImages[s.name] || [];
+
   box.querySelector('.nm').textContent = s.name;
   box.querySelector('.dt').textContent = s.date || '';
   box.querySelector('.tx').textContent = s.note || '';
@@ -2706,9 +2782,22 @@ function showIntroCard(s, i) {
   const conf = MODES[s.mode];
   box.querySelector('.wy').textContent =
     (i > 0 && conf) ? conf.ico + '　' + conf.label + 'で移動' : '出発';
-  const img = box.querySelector('img');
-  if (url) { img.src = url; img.style.display = 'block'; }
-  else { img.removeAttribute('src'); img.style.display = 'none'; }
+
+  // 代表の1枚
+  const lead = box.querySelector('.lead');
+  if (urls[0]) { lead.src = urls[0]; lead.style.display = 'block'; }
+  else { lead.removeAttribute('src'); lead.style.display = 'none'; }
+
+  // その下に小さく並べる残り
+  const strip = box.querySelector('.strip');
+  strip.innerHTML = '';
+  urls.slice(1).forEach(function (u) {
+    const t = document.createElement('img');
+    t.src = u;
+    t.alt = '';
+    strip.appendChild(t);
+  });
+
   box.classList.add('on');
 }
 
@@ -4091,10 +4180,18 @@ async function prepAndEnterStory() {
 let resizeTimer = null;
 
 function mapSizeChanged() {
+  /* 地図の高さを控えておく。
+     オープニングのカードは地図の上に置くので、地図より高くなってはいけない。
+     画面の何割、という決め方だとパネルの高さ次第で外れるため、実寸を渡す。 */
+  const h = $('#mapWrap').getBoundingClientRect().height;
+  if (h > 0) document.documentElement.style.setProperty('--mapH', Math.round(h) + 'px');
+
   clearTimeout(resizeTimer);
   // 引っぱっている最中は何度も呼ばれるので、落ち着いてから1回だけ
   resizeTimer = setTimeout(function () { map.resize(); }, 120);
 }
+
+mapSizeChanged();   // 最初の1回
 
 const watchMapSize = new ResizeObserver(mapSizeChanged);
 watchMapSize.observe($('#mapWrap'));
