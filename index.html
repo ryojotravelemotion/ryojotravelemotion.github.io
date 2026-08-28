@@ -2022,7 +2022,22 @@ async function trackLeg(ds, points, lines) {
 
       console.warn('区間 ' + (i + 1) + ' の' + ds.label + 'をたどれませんでした', err);
       failed++;
-      out = out.concat(densify([a, b]));
+
+      /* 線路が無いところは、直線ではなく道路でつなぐ。
+
+         たとえば苫小牧駅からフェリーターミナルまでの3.4km。
+         そこに線路は無いが、道はある。現実にもバスで移動する区間である。
+         直線で結ぶと海側の埠頭を突っ切るような線になってしまうので、
+         実際に通れる道をたどらせる。
+
+         道路も取れなければ、最後の手段として直線にする。 */
+      let filled = null;
+      try {
+        filled = await fetchRoad('driving', [a, b]);
+      } catch (e2) {
+        console.warn('道路でも埋められませんでした', e2);
+      }
+      out = out.concat(filled || densify([a, b]));
     }
 
     // Overpass に問い合わせていたころは、区間ごとに間隔を空ける必要があった。
@@ -4062,6 +4077,30 @@ async function prepAndEnterStory() {
   document.body.classList.remove('prepping');
   await setMode('story');
 }
+
+/* 地図の入れ物の大きさが変わったら、地図にもそれを伝える。
+
+   伝えないと、地図は前の大きさのまま描き続ける。
+   窓を縦に縮めたときは、はみ出したぶん（＝地図の下側）が見えなくなる。
+   著しく横長の窓で開いたときに気づきやすい。
+
+   「窓の大きさが変わったら」ではなく「入れ物の大きさが変わったら」で見ている。
+   窓の大きさが変わらなくても、パネルが左から上へ移ったり、
+   左の一覧が伸び縮みしたりすると、地図の受け持つ範囲は変わるため。
+   原因が何であれ、結果を見ていれば取りこぼさない。 */
+let resizeTimer = null;
+
+function mapSizeChanged() {
+  clearTimeout(resizeTimer);
+  // 引っぱっている最中は何度も呼ばれるので、落ち着いてから1回だけ
+  resizeTimer = setTimeout(function () { map.resize(); }, 120);
+}
+
+const watchMapSize = new ResizeObserver(mapSizeChanged);
+watchMapSize.observe($('#mapWrap'));
+
+// 入れ物の見張りが使えない場合の保険。両方来ても、まとめて1回にしている。
+window.addEventListener('resize', mapSizeChanged);
 
 $('#editBtn').addEventListener('click', function () { setMode('edit'); });
 
