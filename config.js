@@ -1,1 +1,3 @@
 const MAPBOX_TOKEN = 'pk.eyJ1IjoieXV0YWhhcnJ5MiIsImEiOiJjbXN0Mnh5MmswaWI0MzVuNDdiYXFkMTMwIn0.Yv54u0V7xW7F75PkN4ooWw';
+const SUPABASE_URL = 'https://yzobxxbcqryviozoqkzm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6b2J4eGJjcXJ5dmlvem9xa3ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjU0MDMsImV4cCI6MjEwMzUwMTQwM30.JdrWE9oDgTU7RmiKtSgmdz7WbLbWJXcBYv9a5yN1j5g';

@@ -14,22 +14,22 @@
 <meta property="og:site_name" content="旅情">
 <meta property="og:title" content="旅情 — 旅の体験を、動く物語に">
 <meta property="og:description" content="訪れた場所をつなぐと、鉄道は線路を、車は道路を、船は定期航路をたどって地図が動きます。">
-<meta property="og:image" content="https://yutaharry2.github.io/ryojo/ogp.jpg">
+<meta property="og:image" content="https://ryojotravelemotion.github.io/ogp.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="ja_JP">
-<meta property="og:url" content="https://yutaharry2.github.io/ryojo/">
+<meta property="og:url" content="https://ryojotravelemotion.github.io/">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="旅情 — 旅の体験を、動く物語に">
 <meta name="twitter:description" content="訪れた場所をつなぐと、鉄道は線路を、車は道路を、船は定期航路をたどって地図が動きます。">
-<meta name="twitter:image" content="https://yutaharry2.github.io/ryojo/ogp.jpg">
+<meta name="twitter:image" content="https://ryojotravelemotion.github.io/ogp.jpg">
 
-<link href="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet">
 
 <style>
 
-:root {
+:root { 
   --bg:      #f5f1e8;
   --panel:   #fbf8f2;
   --card:    #ffffff;
@@ -42,6 +42,7 @@
   --ok:      #4a7c59;
   --shadow:  0 2px 14px rgba(27,42,65,.10);
   --shadow-l:0 18px 50px rgba(15,26,40,.30);
+  --ttw:     clamp(212px, 17.5vw, 252px);   /* 行程表の幅 */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden;
@@ -92,6 +93,17 @@ body.has-spots #searchBox { padding: 12px 10px 11px; }
   box-shadow: 0 0 0 3px rgba(53,122,143,.13); }
 #q::placeholder { color: #a8b3bd; }
 #qState { font-size: 10.5px; color: var(--muted); padding: 5px 2px 0; min-height: 15px; }
+/* 名前欄の下に出す候補。場所を選び直すためのもの。 */
+.nameSug:not(:empty) { margin: 4px 0 2px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--card); overflow: hidden; }
+.nameSug button { display: block; width: 100%; text-align: left; background: none;
+  border: 0; border-bottom: 1px solid var(--line2); padding: 7px 10px; font: inherit; }
+.nameSug button:last-child { border-bottom: 0; }
+.nameSug button:hover { background: #eef4f6; }
+.nameSug button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nameSug b { display: block; font-size: 12.5px; font-weight: 600; }
+.nameSug span { display: block; font-size: 10.5px; color: var(--muted); }
+
 #qResults:not(:empty) { margin-top: 4px; border: 1px solid var(--line);
   border-radius: 7px; overflow: hidden; background: var(--card);
   max-height: 260px; overflow-y: auto; box-shadow: var(--shadow); }
@@ -119,9 +131,9 @@ body.has-spots #searchBox { padding: 12px 10px 11px; }
 #guide    { order: 3; }
 #searchBox { order: 4; }
 #listWrap { order: 5; }
-#adSlot   { order: 7; }
 #tools    { order: 8; }
-#credits  { order: 9; }
+#account  { order: 9; }
+#credits  { order: 10; }
 body.has-spots #searchBox { order: 6; border-top: 1px solid var(--line); }
 
 /* 「② 次の場所を検索」の見出し。何番目を作っているのかを示す。
@@ -150,7 +162,15 @@ body.has-spots #searchBox .nextHead { display: flex; }
 .item .ops { display: flex; gap: 3px; }
 .item .ops button { width: 22px; height: 22px; padding: 0; font-size: 11px; line-height: 1;
   background: #eef2f4; border: none; border-radius: 4px; color: var(--muted); }
-.item .ops button:hover { background: #d64545; color: #fff; }
+.item .ops button[data-act=del]:hover { background: #d64545; color: #fff; }
+
+/* 並べ替えの矢印。押せないときは端に居るということなので、薄くして残す
+   （消してしまうと、ボタンの位置が行ごとにずれて押し間違えやすい）。 */
+.item .ops button[data-act=up]:hover:not(:disabled),
+.item .ops button[data-act=down]:hover:not(:disabled) {
+  background: var(--accent); color: #fff; }
+.item .ops button:disabled { opacity: .3; cursor: default; }
+.item .ops button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .item .grip { flex: none; cursor: grab; color: #b9c2ca; font-size: 14px;
   letter-spacing: -2px; user-select: none; padding: 0 2px; }
 .item .grip:active { cursor: grabbing; }
@@ -241,6 +261,48 @@ body.has-spots #searchBox .nextHead { display: flex; }
 .pin.on { transform: scale(1.5); background: #fff; color: var(--accent-d); }
 .vpin { width: 11px; height: 11px; border-radius: 50%; background: #fff;
   border: 2px solid var(--accent); box-shadow: 0 1px 5px rgba(0,0,0,.5); }
+
+/* 到着の印。カメラがその地点にいちばん近づいているあいだだけ立つ。
+
+   編集中の番号つきピン（.pin）とは別物で、番号も押しどころも持たない。
+   あちらは「どこを組んだか」を一覧するためのもので、
+   こちらは動いている画の中で「いまここ」を差すためのもの。
+
+   足もとの輪が地面のどの点を指しているかを示す。
+   ピンの頭だけだと、傾いた画では実際の位置より奥に見えてしまう。 */
+/* 外側（.apin）には position も transform も書かないこと。どちらも MapLibre が
+   ピンを地図上の位置へ運ぶのに使っていて、こちらで書くと奪ってしまう。
+
+   ・position: relative と書くと、maplibre-gl.css の absolute を打ち消す
+     （この style のほうが後に読まれるため）
+   ・transform を動かすアニメーションを置くと、MapLibre が指定する
+     translate を上書きする（アニメーションはインラインスタイルより強い）
+
+   どちらもピンが地図の左上に貼りついたままになる。実際に両方踏んだ。
+   動かすのは内側の .body に任せる。 */
+.apin { width: 24px; height: 31px; pointer-events: none; }
+.apin .body { display: block; position: relative; width: 100%; height: 100%;
+  animation: apinIn .55s cubic-bezier(.2, .9, .3, 1.25) both; }
+.apin .drop { position: absolute; left: 50%; top: 0; width: 21px; height: 21px;
+  margin-left: -10.5px; background: var(--accent); border: 2.5px solid #fff;
+  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  box-shadow: 0 3px 12px rgba(6, 12, 18, .55); }
+.apin .dot { position: absolute; left: 50%; top: 7.5px; width: 7px; height: 7px;
+  margin-left: -3.5px; border-radius: 50%; background: #fff; }
+.apin .ring { position: absolute; left: 50%; bottom: 1px; width: 15px; height: 15px;
+  margin-left: -7.5px; border-radius: 50%; border: 1.6px solid rgba(255, 255, 255, .9);
+  transform: scale(.5); animation: apinRing 2.4s ease-out .35s infinite; }
+
+@keyframes apinIn {
+  from { opacity: 0; transform: translateY(-13px) scale(.72); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* 足もとで静かに広がって消える。目を引きたいが、騒がしくはしたくない。 */
+@keyframes apinRing {
+  0%   { transform: scale(.45); opacity: .9; }
+  75%  { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
 
 #hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6;
   background: var(--ok); color: #fff; padding: 9px 18px; border-radius: 20px;
@@ -343,6 +405,181 @@ body.playing #storyNav .step-btn { opacity: .35; }
   background: rgba(251,248,242,.95); border: 1px solid var(--line); border-radius: 4px;
   padding: 10px 14px; min-width: 78px; text-align: center; box-shadow: var(--shadow); }
 
+/* ---------------------------------------------------------------------------
+   行程表
+
+   置き場所は地図の右端。本文は左にいるので、左右に分かれて場所を
+   取り合わない。移動しているあいだ写真は消えるので、右側は
+   まるごと空く。ちょうどそのとき「いま旅のどのあたりを進んでいるのか」が
+   分からなくなるので、そこへ立てておく。
+
+   見た目は乗換案内の縦の一覧に寄せた。上から下へ一本の線が伸び、
+   停まる場所に丸が付き、区間ごとに乗り物と路線と距離が並ぶ。
+   線の色は乗り物ごとに変える。徒歩と飛行機は破線にする
+   （道の上を走っていない、という区別）。
+
+   移動中は、その区間の線が上から下へ塗られていき、
+   塗られた先端を乗り物の絵が下りていく。地図の上で経路が
+   描き足されていくのと、同じ動きを小さく写したもの。
+   --------------------------------------------------------------------------- */
+
+#ttable { position: absolute; z-index: 5; right: 18px; top: 56px; bottom: 82px;
+  width: var(--ttw); display: none; flex-direction: column;
+  background: rgba(251,248,242,.93); border: 1px solid var(--line);
+  border-radius: 6px; box-shadow: var(--shadow-l); overflow: hidden; }
+body.mode-story.tt-on:not(.tt-off) #ttable,
+body.intro.tt-on:not(.tt-off) #ttable { display: flex; }
+
+/* はじめの画面には上下の帯（題字の列・送りの操作）が無いので、
+   そのぶん縦を長く使える。 */
+body.intro #ttable { top: 12px; bottom: 12px; }
+
+/* 行程表が立っているぶん、写真は左へ寄せて細くする */
+body.mode-story.tt-on:not(.tt-off) #photo {
+  right: calc(var(--ttw) + 3.5vw); width: min(34vw, 520px); }
+
+/* 本文・写真・行程表の3列が横に並ぶ。窓が細くなるとどれかが重なるので、
+   本文の幅を「窓の半分弱から行程表を引いた残り」に抑えて避ける。
+   ただし細くしすぎると読めないので、280px より下げない。 */
+body.mode-story.tt-on:not(.tt-off) #story .inner {
+  max-width: clamp(280px, calc(54vw - var(--ttw)), 460px); }
+
+/* はじめの画面の紹介カードも、行程表のぶん左へ寄せる */
+body.intro.tt-on:not(.tt-off) #introCard { right: calc(var(--ttw) + 5vw); }
+@media (max-aspect-ratio: 7/5) {
+  body.intro.tt-on:not(.tt-off) #introCard { right: calc(var(--ttw) + 3vw); }
+}
+
+/* はじめの画面は、紹介カードが幅の大半を占める。
+   窓が狭いと行程表を置く余地が残らないので、そこでは出さない。
+   （旅程の再生のほうは、細い姿にして出し続ける） */
+@media (max-width: 900px) {
+  body.intro.tt-on:not(.tt-off) #ttable { display: none; }
+  body.intro.tt-on:not(.tt-off) #introCard { right: 4vw; }
+}
+@media (max-aspect-ratio: 7/5) and (max-width: 900px) {
+  body.intro.tt-on:not(.tt-off) #introCard { right: 2vw; }
+}
+
+#ttable .hd { flex: none; padding: 11px 13px 10px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(#fdfcf8, #f4efe4); }
+#ttable .hd b { display: block; font-size: 12.5px; letter-spacing: 3px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+#ttable .hd span { display: block; font-size: 10.5px; color: var(--muted);
+  margin-top: 3px; letter-spacing: .5px; }
+
+#ttable .rows { flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 0 18px; scrollbar-width: thin; }
+
+#ttable .stop, #ttable .seg { display: grid; grid-template-columns: 26px 24px 1fr;
+  column-gap: 6px; padding-right: 12px; opacity: .42;
+  transition: opacity .45s ease; }
+#ttable .stop.done, #ttable .stop.now,
+#ttable .seg.done, #ttable .seg.run { opacity: 1; }
+
+#ttable .stop { min-height: 44px; align-items: center; }
+#ttable .seg { min-height: 88px; }
+
+#ttable .no { font-size: 10.5px; color: var(--muted); text-align: right;
+  font-variant-numeric: tabular-nums; padding-top: 1px; }
+
+/* 線を通す柱。停まる場所では、上半分を「来た区間」の色、
+   下半分を「これから行く区間」の色にする。色が変わる場所が乗り換え。 */
+#ttable .rail { position: relative; }
+#ttable .stop .rail::before, #ttable .stop .rail::after {
+  content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+  width: 4px; opacity: .3; }
+#ttable .stop .rail::before { top: 0; height: 50%; background: var(--cu, transparent); }
+#ttable .stop .rail::after { top: 50%; height: 50%; background: var(--cd, transparent); }
+#ttable .stop.done .rail::before, #ttable .stop.done .rail::after,
+#ttable .stop.now .rail::before { opacity: .95; }
+
+#ttable .pin { position: absolute; left: 50%; top: 50%; width: 11px; height: 11px;
+  margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--panel);
+  border: 3px solid var(--muted); z-index: 1; }
+#ttable .stop.done .pin { border-color: var(--cu, var(--accent)); }
+#ttable .stop.now .pin { width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+  border-color: var(--accent); background: var(--accent);
+  animation: ttPulse 1.9s ease-out infinite; }
+@keyframes ttPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(53,122,143,.55); }
+  100% { box-shadow: 0 0 0 12px rgba(53,122,143,0); }
+}
+
+#ttable .stop .nm { font-size: 13.5px; letter-spacing: .5px; line-height: 1.4;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+#ttable .stop.now .nm { color: var(--accent-d); font-weight: 600; }
+#ttable .stop .dt { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* 区間。track は道すじ、fill は通り過ぎたぶん、veh は走っている乗り物。 */
+#ttable .seg .track, #ttable .seg .fill { position: absolute; left: 50%; top: 0;
+  transform: translateX(-50%); width: 4px; background: var(--c); }
+#ttable .seg .track { bottom: 0; opacity: .26; }
+#ttable .seg .fill { height: var(--p, 0%); opacity: .95; }
+#ttable .seg.dash .track, #ttable .seg.dash .fill {
+  background: linear-gradient(var(--c) 55%, transparent 0); background-size: 4px 11px; }
+
+#ttable .seg .veh { position: absolute; left: 50%; top: var(--p, 0%);
+  transform: translate(-50%, -50%); font-size: 17px; line-height: 1;
+  opacity: 0; transition: opacity .35s ease;
+  filter: drop-shadow(0 1px 2px rgba(15,26,40,.35)); }
+#ttable .seg.run .veh { opacity: 1; }
+
+#ttable .seg .txt { padding: 8px 0 9px 5px; }
+#ttable .seg .md { font-size: 11.5px; letter-spacing: .5px; color: var(--ct); }
+#ttable .seg .ln { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+#ttable .seg .km { font-size: 10.5px; color: var(--muted); margin-top: 4px;
+  font-variant-numeric: tabular-nums; }
+
+/* 窓が狭いときは、文字を落として線と乗り物だけにする。
+   名前は読めなくなるが、「いま何番目の区間を進んでいるか」は残る。 */
+@media (max-width: 880px) {
+  :root { --ttw: 60px; }
+  #ttable { right: 10px; top: 52px; bottom: 76px; }
+  #ttable .hd, #ttable .no, #ttable .stop .txt, #ttable .seg .txt { display: none; }
+  #ttable .stop, #ttable .seg { grid-template-columns: 1fr; padding-right: 0; }
+  #ttable .seg { min-height: 62px; }
+
+  /* ここまで細いと、本文の幅を半分に抑えると読めなくなる。
+     左端から行程表の手前まで、残りをそのまま使う。
+     （本文の枠は幅いっぱい＋左に 7vw ずれた形なので、
+       max-width ではなく右の余白で止める） */
+  body.mode-story.tt-on:not(.tt-off) #story .inner {
+    width: auto; margin-right: calc(var(--ttw) + 5vw); max-width: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   幅が足りない窓では、本文と写真を上下に分ける
+
+   横に余裕があるうちは「左に本文・右に写真」で足りる。本文の幅は
+   窓に合わせて縮むので、写真との間はいつも空いている。
+
+   ところが幅が 880px を切ると、本文は縮むのをやめて左端から
+   行程表の手前までいっぱいに広がる（これ以上細くすると読めないため）。
+   そこへ写真が重なり、しかも画面の真ん中に居座って地図を塞ぐ。
+
+   幅が足りないのだから、縦に分ける。写真を上、本文を下へ寄せれば、
+   あいだの帯が空いて、いまどこを走っているのかは見えたままになる。
+
+   切り替えの目安は、行程表を細くするのと同じ 880px。
+   本文が広がり始めるのがそこだから、写真の置き場所が要るのもそこ。
+   --------------------------------------------------------------------------- */
+@media (max-width: 880px) {
+  #photo { top: 14px; left: 4vw; right: 4vw; width: auto;
+    transform: translateY(0) scale(.97); }
+  #photo.on { transform: translateY(0) scale(1); }
+
+  /* 上下に分けるので、写真は高さのほうで抑える */
+  #photo img { max-height: 32vh; }
+
+  /* 本文は下端へ。送りの操作の上で止める。 */
+  #story .inner { align-items: flex-end; padding-bottom: 78px; }
+
+  /* 行程表は右端に立っているので、写真はその手前で止める */
+  body.mode-story.tt-on:not(.tt-off) #photo {
+    right: calc(var(--ttw) + 4vw); width: auto; }
+}
+
 #topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 6;
   padding: 12px 18px; display: none; justify-content: space-between; align-items: center;
   background: linear-gradient(rgba(245,241,232,.96), rgba(245,241,232,.55) 70%, transparent); }
@@ -389,7 +626,9 @@ select.btn option { background: var(--card); color: var(--text); }
   #brand #tripName { flex: 1; min-width: 180px; margin: 0; }
 
   /* 出典も一列に流す */
-  #credits { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 9px 14px 12px; }
+  #credits { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 4px 16px; padding: 9px 14px 12px; }
+  #credits .checks { margin-top: 0; padding-top: 0; border-top: 0; }
 
   /* オープニング中は題字を大きく見せているが、
      上に置くと縦に場所を取りすぎるので控えめにする */
@@ -410,7 +649,30 @@ select.btn option { background: var(--card); color: var(--text); }
   background: linear-gradient(#fdfcf8, #f7f3ea); }
 body.intro #introSteps { display: block; }
 body.intro #guide, body.intro #tripName, body.intro #listWrap,
-body.intro #tools, body.intro #adSlot, body.intro #mapEmpty { display: none; }
+body.intro #tools, body.intro #mapEmpty { display: none; }
+
+/* ログインの欄は、オープニングでも出しておく。
+
+   ここを隠すと、前に預けた旅程を持っている人が、
+   まず場所をひとつ追加しないと「サーバーから開く」に辿り着けない。
+   開いていきなり続きから始められないのは、隠して得るものより大きい。
+
+   ただし縦には積まない。オープニングのパネルは題字と手順で
+   すでに背が高いので、一行に流して高さを地図に譲る。 */
+body.intro #account { display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px 10px; padding: 9px 14px 11px; }
+
+/* 宛名は 200px を下限にして、それより詰まるなら折り返す。
+   ここを単に flex:1 にすると、ログイン中はボタン3つに押し出されて
+   幅が 0 になり、誰でログインしているのか読めなくなる。 */
+body.intro #account .who { flex: 1 1 200px; min-width: 0; }
+/* 出し分け（ログイン前は .out、後は .in）は下の指定が持っている。
+   ここで単に .out を出すと、指定の強さで勝ってしまい、
+   ログイン後も「ログイン」が残る。前のときだけ、と書いておく。 */
+body.intro #account:not(.signed) .out { display: flex; }
+body.intro #account.signed .in { display: flex; gap: 6px; }
+body.intro #account .in .grid2 { display: flex; gap: 6px; }
+body.intro #account .btn.sm { white-space: nowrap; }
 body.intro #side { justify-content: flex-start; }
 body.intro #brand { padding: 26px 16px 18px; }
 body.intro #brand h1 { font-size: 38px; letter-spacing: 11px; text-indent: 11px; margin-bottom: 7px; }
@@ -427,6 +689,7 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
       "brand   brand"
       "flow    search"
       "demo    note"
+      "account account"
       "credits credits";
   }
 
@@ -440,6 +703,7 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
   body.intro #introDemo { grid-area: demo; padding: 0 18px; margin-bottom: 0; }
   body.intro #introSteps .note { grid-area: note; padding: 6px 18px 8px; }
   body.intro #credits  { grid-area: credits; border-top: 1px solid var(--line2); }
+  body.intro #account  { grid-area: account; padding: 8px 18px 10px; }
 
   /* 検索欄は右の列の上寄り。3つの手順と高さが揃う。 */
   body.intro #searchBox { grid-area: search; align-self: center;
@@ -479,15 +743,11 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
    引く動き（3.854秒・一回きり）と、飛行機の番の入れ替え（26.4秒・くり返し）を
    別々の動きとして重ねている。 */
 #introDemo .rt { stroke: var(--accent); stroke-width: 2.2; fill: none;
-  stroke-linecap: round; stroke-dasharray: 263.1; stroke-dashoffset: 263.1;
-  animation: introDraw 3.854s ease-in-out forwards,
-             introCurveShow 26.4s linear infinite; }
+  stroke-linecap: round; stroke-dasharray: 263.1; stroke-dashoffset: 263.1; }
 
 /* 飛行機の番だけ、線もまっすぐになる。
    こちらも引くのは一度だけで、飛行機が最初に来る13.2秒後から。 */
-#introDemo .rt.air { stroke-dasharray: 257.3; stroke-dashoffset: 257.3; opacity: 0;
-  animation: introDrawAir 3.854s ease-in-out 13.2s forwards,
-             introAirShow 26.4s linear infinite; }
+#introDemo .rt.air { stroke-dasharray: none; stroke-dashoffset: 0; opacity: 0; }
 /* 乗り物ごとに、走っている場所を変える。
    鉄道なら線路、車・バイク・自転車なら道路、船なら水、飛行機なら空。
    どれも同じ曲線の上に重ねて描き、その乗り物の番のあいだだけ見せる。
@@ -498,144 +758,61 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
      50〜66.7%  飛行機   → 空（線が直線に替わる。地面は出さない）
      66.7〜83.3% 船      → 水
      83.3〜100% 自転車   → 道路                                        */
-#introDemo .sf { fill: none; opacity: 0;
-  animation-duration: 26.4s; animation-timing-function: linear;
-  animation-iteration-count: infinite; }
+#introDemo .sf { fill: none; opacity: 0; }
 
 /* 線が引かれきるまでは、地面も出さない。
    引いている途中に枕木だけ先に並ぶと、順序が逆に見える。 */
-#introDemo .surfaces { opacity: 0; animation: introSurfaceIn .5s linear 3.854s forwards; }
+#introDemo .surfaces { opacity: 0; }
 
 /* --- 線路 ---------------------------------------------------------------
    下から順に、バラスト（砂利）→ 枕木 → レール。
    レールを2本に見せるために、太い線を1本引いてから、
    その真ん中をバラストと同じ色で細く塗りつぶしている。
    残った両端が、2本のレールになる。                                      */
-#introDemo .sf.railBed { stroke: #cdc0a8; stroke-width: 9.5; stroke-linecap: round;
-  animation-name: introRailShow; }
+#introDemo .sf.railBed { stroke: #cdc0a8; stroke-width: 9.5; stroke-linecap: round; }
 #introDemo .sf.railTie { stroke: #8a7358; stroke-width: 9; stroke-linecap: butt;
-  stroke-dasharray: 1.5 3; animation-name: introRailShow; }
-#introDemo .sf.railOut { stroke: #4f5a61; stroke-width: 5; stroke-linecap: butt;
-  animation-name: introRailShow; }
-#introDemo .sf.railIn  { stroke: #cdc0a8; stroke-width: 2.6; stroke-linecap: butt;
-  animation-name: introRailShow; }
+  stroke-dasharray: 1.5 3; }
+#introDemo .sf.railOut { stroke: #4f5a61; stroke-width: 5; stroke-linecap: butt; }
+#introDemo .sf.railIn  { stroke: #cdc0a8; stroke-width: 2.6; stroke-linecap: butt; }
 
 /* --- 道路 ---------------------------------------------------------------
    外側の白線 → アスファルト → 中央線。線路と同じ重ね方。               */
-#introDemo .sf.roadEdge { stroke: #e7e2d6; stroke-width: 7.8; stroke-linecap: round;
-  animation-name: introRoadShow; }
-#introDemo .sf.roadBed  { stroke: #6f747a; stroke-width: 6.2; stroke-linecap: round;
-  animation-name: introRoadShow; }
+#introDemo .sf.roadEdge { stroke: #e7e2d6; stroke-width: 7.8; stroke-linecap: round; }
+#introDemo .sf.roadBed  { stroke: #6f747a; stroke-width: 6.2; stroke-linecap: round; }
 #introDemo .sf.roadMid  { stroke: #e5cf82; stroke-width: 0.9; stroke-linecap: butt;
-  stroke-dasharray: 4 4.5; animation-name: introRoadShow; }
+  stroke-dasharray: 4 4.5; }
 
 /* --- 海 -----------------------------------------------------------------
    面いっぱいを青くして、小さな波をいくつも散らす。                      */
-#introDemo .sf.seaBg { fill: url(#seaGrad); fill-opacity: .62; stroke: none;
-  animation-name: introSeaShow; }
+#introDemo .sf.seaBg { fill: url(#seaGrad); fill-opacity: .62; stroke: none; }
 #introDemo .sf.seaWaves { stroke: #ffffff; stroke-width: 1.1; stroke-opacity: .5;
-  stroke-linecap: round; fill: none; animation-name: introSeaShow; }
+  stroke-linecap: round; fill: none; }
 
 /* --- 空 -----------------------------------------------------------------
    面いっぱいを淡い青にして、雲を浮かべる。
    雲は白いので、背景が青くないと見えない。                              */
-#introDemo .sf.skyBg { fill: url(#skyGrad); fill-opacity: .75; stroke: none;
-  animation-name: introSkyShow; }
-#introDemo .sf.cloud { fill: #ffffff; fill-opacity: .85; stroke: none;
-  animation-name: introSkyShow; }
+#introDemo .sf.skyBg { fill: url(#skyGrad); fill-opacity: .75; stroke: none; }
+#introDemo .sf.cloud { fill: #ffffff; fill-opacity: .85; stroke: none; }
 
 /* 飛行機の番だけ、線は飛行機雲のように細い白にする */
 #introDemo .rt.air { stroke: #ffffff; stroke-width: 1.6; stroke-opacity: .9; }
 
 #introDemo .pin { fill: var(--accent-d); }
-#introDemo .pin.b { opacity: 0; animation: introPin 26.4s ease-in-out infinite; }
-/* 乗り物が順番に線の上を走る。
-   1台の持ち時間は4.4秒。6台なので一周は26.4秒。
-   それぞれの開始を4.4秒ずつ後ろへずらして、交代で出てくるようにしている。 */
+#introDemo .pin.b { opacity: 0; }
+/* 乗り物。位置も左右の向きも JS（startStrip）が毎フレーム決める。
+   ここでは大きさと、文字を置く基準だけを決めておく。
+
+   text-anchor と dominant-baseline を中央にすることで、
+   絵文字は要素の原点(0,0)を中心に描かれる。
+   JS はそこへ transform を掛けるだけで、位置と反転の両方を作れる。
+
+   以前はここに transform-box: fill-box と transform: scaleX(-1) を書いて
+   左右反転していた。iPhone ではこれが効かず、絵文字の中心ではなく
+   SVG 全体の中心を軸に反転してしまい、飛行機以外の5台が
+   右から左へ走っていた（実機の録画で x が 81→17 と減るのを確認）。 */
 #introDemo .tr { font-size: 26px; text-anchor: middle; dominant-baseline: central;
-  opacity: 0; offset-rotate: 0deg;
-  transform-box: fill-box; transform-origin: 50% 50%;
-  animation: introMove 26.4s ease-in-out infinite; }
+  opacity: 0; }
 
-/* 乗り物の絵文字は、ほとんどが左を向いている。
-   線は左から右へ進むので、後ろ向きに走って見えてしまう。
-   飛行機だけは元から右上を向いているので、そのままにする。 */
-#introDemo .flip { transform: scaleX(-1); }
-/* 負の待ち時間なので、大きくずらした台ほど早く順番が回ってくる。
-   並べた順（電車→車→バイク→飛行機→船→自転車）で出るように、
-   2台目以降を後ろから割り当てている。 */
-#introDemo .v1 { animation-delay:      0s; }
-#introDemo .v2 { animation-delay: -22.0s; }
-#introDemo .v3 { animation-delay: -17.6s; }
-#introDemo .v4 { animation-delay: -13.2s; }
-#introDemo .v5 {  animation-delay: -8.8s; }
-#introDemo .v6 {  animation-delay: -4.4s; }
-/* 引く動き。先頭の電車と同じ3.854秒で、一度だけ。 */
-@keyframes introDraw    { from { stroke-dashoffset: 263.1; } to { stroke-dashoffset: 0; } }
-@keyframes introDrawAir { from { stroke-dashoffset: 257.3; } to { stroke-dashoffset: 0; } }
-
-/* 見せ方の入れ替え。飛行機の番（50%〜66.7%）だけ直線に替わる。 */
-@keyframes introCurveShow {
-  0%, 49.4%   { opacity: 1; }
-  50%, 66.4%  { opacity: 0; }
-  67%, 100%   { opacity: 1; }
-}
-@keyframes introAirShow {
-  0%, 49.4%   { opacity: 0; }
-  50%, 66.4%  { opacity: 1; }
-  67%, 100%   { opacity: 0; }
-}
-@keyframes introPin { 0%, 13% { opacity: 0; } 14.6%, 100% { opacity: 1; } }
-
-/* 地面の出し入れ。入れ替わりは 0.5%（＝約130ミリ秒）だけ重なる。
-   ちょうどその間は乗り物も消えているので、混ざったところは目に入らない。 */
-@keyframes introSurfaceIn { to { opacity: 1; } }
-@keyframes introRailShow {
-  0%, 16.2%    { opacity: 1; }
-  16.7%, 100%  { opacity: 0; }
-}
-@keyframes introRoadShow {
-  0%, 16.2%    { opacity: 0; }
-  16.7%, 49.4% { opacity: 1; }
-  50%, 82.9%   { opacity: 0; }
-  83.3%, 100%  { opacity: 1; }
-}
-@keyframes introSkyShow {
-  0%, 49.4%    { opacity: 0; }
-  50%, 66.2%   { opacity: 1; }
-  66.7%, 100%  { opacity: 0; }
-}
-@keyframes introSeaShow {
-  0%, 66.2%    { opacity: 0; }
-  66.7%, 82.9% { opacity: 1; }
-  83.3%, 100%  { opacity: 0; }
-}
-/* 26.4秒のうち、最初の1/6（＝4.4秒）が自分の出番。
-   持ち時間いっぱいを使って走り、次の1台と入れ替わる。
-   残りは線の終わりに隠れて待っている。 */
-/* 位置の区切りは 0% と 14.6% の2つだけにする。
-   途中に区切りを入れると、そこで緩急が切り替わって線とずれる。
-   薄れ方（opacity）は別の区切りで指定してよい。 */
-@keyframes introMove {
-  0%      { offset-distance: 0%;   opacity: 0; }
-  0.8%    { opacity: 1; }
-  14.6%   { offset-distance: 100%; opacity: 1; }
-  15.6%   { opacity: 0; }
-  100%    { offset-distance: 100%; opacity: 0; }
-}
-/* 動きを抑える設定の人には、走らせずに1台だけ置いておく */
-@media (prefers-reduced-motion: reduce) {
-  #introDemo .rt, #introDemo .pin.b, #introDemo .tr { animation: none; }
-  #introDemo .rt { stroke-dashoffset: 0; }
-  #introDemo .rt.air { display: none; }
-  #introDemo .pin.b { opacity: 1; }
-  #introDemo .v1 { opacity: 1; offset-distance: 52%; }
-  /* 止まっているのは新幹線なので、地面は線路だけ出す */
-  #introDemo .surfaces { animation: none; opacity: 1; }
-  #introDemo .sf { animation: none; opacity: 0; }
-  #introDemo .sf.railBed, #introDemo .sf.railTie,
-  #introDemo .sf.railOut, #introDemo .sf.railIn { opacity: 1; }
-}
 #introSteps .opener.primary { background: var(--accent); border-color: var(--accent);
   color: #fff; font-weight: 700; padding: 10px; font-size: 12px; }
 #introSteps .opener.primary:hover { background: var(--accent-d); border-color: var(--accent-d);
@@ -645,6 +822,8 @@ body.intro #q { padding: 12px 12px; font-size: 13px; }
 #introSteps .opener { width: 100%; padding: 8px; font-size: 11px; background: var(--card);
   border: 1px solid var(--line); border-radius: 3px; color: var(--text); margin-top: 2px; }
 #introSteps .opener:hover { border-color: var(--accent); color: var(--accent-d); }
+#introSteps .note .what, #introSteps .note .privacy { display: block; }
+#introSteps .note .privacy { margin-top: 10px; }
 #introSteps .note { font-size: 10px; color: #9aa5ae; line-height: 1.85; padding: 10px 2px 6px; }
 
 /* オープニングの読み込み中に出す案内。
@@ -663,6 +842,18 @@ body.opening-wait #opening { opacity: 1; }
 #credits { padding: 11px 16px 16px; border-top: 1px solid var(--line2);
   font-size: 9.5px; line-height: 1.75; color: #a6b0b8; letter-spacing: .3px; }
 #credits b { font-weight: 600; color: #8b969f; }
+
+/* 規約とポリシー。出典と同じ小ささでよいが、探されるものなので線で区切る。 */
+#credits .legal { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line2); }
+#credits .legal a { color: #8b969f; text-decoration: underline; text-underline-offset: 2px; }
+#credits .legal a:hover { color: var(--accent-d); }
+
+/* 点検口。押すのは何かが壊れているときだけなので、出典と同じ小ささにする。 */
+#credits .checks { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line2); }
+#credits .checks button { padding: 0; background: none; border: 0; font-size: 9.5px;
+  color: #8b969f; text-decoration: underline; text-underline-offset: 2px;
+  letter-spacing: .3px; }
+#credits .checks button:hover { color: var(--accent-d); }
 
 #introCard { position: fixed; right: 4vw; bottom: 4vh; z-index: 61;
   width: clamp(220px, 22vw, 360px); opacity: 0; pointer-events: none;
@@ -725,6 +916,42 @@ body.opening-wait #opening { opacity: 1; }
     text-align: left; }
 }
 
+/* ---------------------------------------------------------------------------
+   縦長の窓（パネルが上、しかし窓がそれほど高くない）
+
+   このとき上のパネルは中身のぶんだけ高さを取り、地図に半分しか残らない。
+   実測（880×860）では パネル436px / 地図424px。地図がこれだけ低いと、
+   経路を収めるために極端に縮小され、日本が豆粒になる。
+
+   高さを食っていたのは説明文（135px）と出典（80px）の二つだった。
+   どちらも消さずに詰めて、地図に100px以上を返す。
+
+   もう一つ、オープニングのカードが地図の中心に重なる問題もここで直す。
+   カードは右下に置いているが、幅が地図の6割あるため、
+   左の端が中心より左まで届いてしまっていた。
+   中心にはスポットが立つので、幅を詰めて中心を空ける。
+   （高さは詰めなくてよい。左端が中心より右にあれば、縦にどれだけ
+     伸びても中心には掛からない） */
+@media (max-aspect-ratio: 7/5) and (min-width: 640px) and (max-height: 950px) {
+  /* 手順の下の小さな説明は、絵と名前だけでも意味が通る */
+  body.intro #introFlow .ds { display: none; }
+  body.intro #introDemo { height: 46px; }
+
+  /* 説明文は消さずに、字と行間だけ詰める */
+  body.intro #introSteps .note { font-size: 10px; line-height: 1.7;
+    padding: 4px 18px 6px; }
+
+  body.intro #account { padding: 6px 18px 8px; }
+  body.intro #credits { padding: 7px 14px 9px; font-size: 9px; line-height: 1.6; }
+
+  /* 地図の取り分を増やす */
+  body.intro #side { max-height: 46vh; }
+  body.intro #mapWrap { min-height: 54vh; }
+
+  /* カードの左端を、地図の中心より右へ寄せる */
+  body.intro #introCard { width: clamp(280px, 42vw, 400px); }
+}
+
 /* 画面がとても狭いときは、写真の列を細くして文字の場所を確保する */
 @media (max-aspect-ratio: 7/5) and (max-width: 520px) {
   #introCard { width: 92vw; right: 4vw; }
@@ -744,80 +971,63 @@ body.prepping #prep { display: flex; }
   color: var(--muted); font-size: 11px; padding: 8px 18px; border-radius: 4px; }
 #prep .note { margin-top: 22px; font-size: 10.5px; color: #9aa5ae; line-height: 1.95; }
 
-#adSlot { padding: 10px 11px 0; }
-#adSlot .lbl { font-size: 9.5px; color: #a8b3bd; letter-spacing: 2px; margin-bottom: 4px; }
-#adSlot .box { border: 1px dashed var(--line); border-radius: 4px; background: #fdfcf8;
-  height: 160px; display: flex; align-items: center; justify-content: center;
-  text-align: center; font-size: 11px; color: #a8b3bd; line-height: 1.9; }
-#adSlot .box span { font-size: 10px; color: #c2cad1; }
-#adSlot .note { font-size: 9.5px; color: #a8b3bd; margin-top: 4px; }
-/* 地図が出せないときの案内。
-   地図はよそから借りているので、こちらに非が無くても出ない日がある。
-   何も出ないと「壊れたサイト」に見えるので、そうならないようにする。 */
-#mapFail { position: fixed; inset: 0; z-index: 90; display: none;
-  align-items: center; justify-content: center; background: var(--bg); padding: 24px; }
-body.map-failed #mapFail { display: flex; }
-#mapFail .panel { background: var(--panel); border: 1px solid var(--line);
-  border-top: 3px solid var(--accent); border-radius: 4px; padding: 34px 32px;
-  max-width: 460px; box-shadow: var(--shadow); text-align: left; }
-#mapFail b { display: block; font-size: 17px; margin-bottom: 14px;
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
-#mapFail p { margin: 0 0 20px; font-size: 13px; line-height: 1.95; color: var(--muted); }
-#mapFail button { padding: 9px 22px; font-size: 12px; background: var(--accent);
-  color: #fff; border: 0; border-radius: 3px; cursor: pointer; }
-#mapFail button:hover { background: var(--accent-d); }
-
-body.no-ads #adSlot { display: none; }
-.linkish { background: none; border: none; padding: 0; font-size: 9.5px;
-  color: var(--accent); text-decoration: underline; }
-
-.affRow { margin-bottom: 7px; }
-a.aff { display: block; text-decoration: none; font-size: 11.5px;
-  background: #f0f6f8; border: 1px solid #cfe0e6; border-radius: 4px;
-  padding: 9px 11px; color: var(--accent-d); }
-a.aff:hover { background: #e5f0f4; border-color: var(--accent); }
-a.aff .pr { font-size: 9px; background: var(--muted); color: #fff;
-  padding: 1px 5px; border-radius: 3px; margin-right: 7px; vertical-align: 1px; }
-.chap a.aff { margin-top: 14px; background: rgba(240,246,248,.8); }
-body.playing .aff { display: none; }
-body.no-aff .aff { display: none; }
-
-#consent { position: fixed; left: 0; right: 0; bottom: 0; z-index: 65;
-  background: var(--text); color: #eef2f5; padding: 16px 20px;
-  box-shadow: 0 -8px 30px rgba(0,0,0,.25); display: none; }
-body.need-consent #consent { display: block; }
-#consent .inner { max-width: 900px; margin: 0 auto;
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-#consent .txt { flex: 1; min-width: 260px; }
-#consent b { font-size: 12.5px; display: block; margin-bottom: 5px; }
-#consent p { margin: 0; font-size: 11px; line-height: 1.85; color: #b9c4cf; }
-#consent a { color: #9fd3e3; }
-#consent .acts { display: flex; gap: 8px; }
-#consent button { padding: 10px 18px; font-size: 12px; border-radius: 4px; border: 1px solid #4a5a6e;
-  background: transparent; color: #eef2f5; white-space: nowrap; }
-#consent button.ok { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
-
-#odptPanel { position: fixed; inset: 0; z-index: 66; background: rgba(27,42,65,.45);
+.sheet { position: fixed; inset: 0; z-index: 66; background: rgba(27,42,65,.45);
   display: none; align-items: center; justify-content: center; padding: 24px; }
-body.odpt-open #odptPanel { display: flex; }
-#odptPanel .inner { background: var(--panel); border: 1px solid var(--line);
+body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
+.sheet .inner { background: var(--panel); border: 1px solid var(--line);
   border-radius: 4px; width: 100%; max-width: 720px; max-height: 80vh;
   display: flex; flex-direction: column; box-shadow: var(--shadow-l); }
-#odptPanel .head { display: flex; align-items: center; justify-content: space-between;
+.sheet .head { display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; border-bottom: 1px solid var(--line); }
-#odptPanel .head b { font-size: 13px; letter-spacing: 1px; }
-#odptPanel .head button { padding: 5px 14px; font-size: 11px; background: var(--card);
+.sheet .head b { font-size: 13px; letter-spacing: 1px; }
+.sheet .head button { padding: 5px 14px; font-size: 11px; background: var(--card);
   border: 1px solid var(--line); border-radius: 3px; color: var(--text); }
-#odptPanel .body { padding: 16px 18px; overflow-y: auto; font-size: 12px; line-height: 1.9; }
-#odptPanel .step { display: flex; gap: 9px; padding: 5px 0; align-items: baseline; }
-#odptPanel .mark { flex: none; width: 18px; font-weight: 700; }
-#odptPanel .ok .mark { color: var(--ok); }
-#odptPanel .ng .mark { color: #c92a2a; }
-#odptPanel .wait .mark { color: var(--muted); }
-#odptPanel code { background: #eef2f4; padding: 1px 5px; border-radius: 3px;
+.sheet .body { padding: 16px 18px; overflow-y: auto; font-size: 12px; line-height: 1.9; }
+.sheet .step { display: flex; gap: 9px; padding: 5px 0; align-items: baseline; }
+.sheet .mark { flex: none; width: 18px; font-weight: 700; }
+.sheet .ok .mark { color: var(--ok); }
+.sheet .ng .mark { color: #c92a2a; }
+.sheet .wait .mark { color: var(--muted); }
+.sheet code { background: #eef2f4; padding: 1px 5px; border-radius: 3px;
   font-size: 11px; word-break: break-all; }
-#odptPanel .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+.sheet .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
   font-size: 11px; color: var(--muted); }
+.sheet .field { width: 100%; padding: 10px 11px; margin: 10px 0 4px; font-size: 13px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+.sheet .field:focus { outline: none; border-color: var(--accent); }
+.sheet .go { padding: 10px 18px; font-size: 12.5px; border-radius: 6px; font-weight: 700;
+  background: var(--accent); border: 1px solid var(--accent); color: #fff; }
+.sheet .go:hover:not(:disabled) { background: var(--accent-d); border-color: var(--accent-d); }
+.sheet .tripRow { display: flex; align-items: center; gap: 10px; padding: 9px 2px;
+  border-bottom: 1px solid var(--line2); }
+.sheet .tripRow .th { flex: none; width: 46px; height: 34px; border-radius: 3px;
+  background: repeating-linear-gradient(45deg, #f0ece2, #f0ece2 6px, #eae5d9 6px, #eae5d9 12px);
+  overflow: hidden; }
+.sheet .tripRow .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sheet .tripRow .nm { flex: 1; min-width: 0; font-size: 12.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet .tripRow .at { flex: none; font-size: 10.5px; color: var(--muted); }
+.sheet .tripRow button { flex: none; padding: 5px 12px; font-size: 11px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 3px; color: var(--text); }
+.sheet .tripRow button.del { color: #c92a2a; }
+.sheet .none { padding: 10px 0; color: var(--muted); }
+
+/* --------------------------------------------------------------------------
+   サーバーとの繋がり
+
+   ログインしていないあいだは「ログイン」だけ、
+   していれば宛名と、保存・呼び出し・ログアウトを出す。
+   鍵（config.js）が入っていないときは、その旨だけを出して押させない。
+   -------------------------------------------------------------------------- */
+#account { padding: 10px 11px 12px; border-top: 1px solid var(--line);
+  background: #f7f3ea; display: grid; gap: 6px; }
+#account .who { display: flex; align-items: center; gap: 8px; }
+#account .who .lbl { flex: 1; min-width: 0; font-size: 11px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#account.signed .who .lbl { color: var(--accent-d); font-weight: 600; }
+#account .in { display: none; gap: 5px; }
+#account.signed .in { display: grid; }
+#account.signed .out { display: none; }
 
 .lineItem .src { font-size: 8.5px; padding: 1px 5px; border-radius: 2px;
   margin-right: 7px; color: #fff; background: var(--muted); }
@@ -829,6 +1039,104 @@ body.odpt-open #odptPanel { display: flex; }
   font-size: 12.5px; z-index: 70; opacity: 0; transition: opacity .3s;
   pointer-events: none; box-shadow: var(--shadow-l); }
 #toast.on { opacity: 1; }
+/* ---------------------------------------------------------------------------
+   手のひらの画面のオープニング
+
+   上のパネルには、題字・3つの手順・乗り物の帯・説明・検索欄・ログイン・出典が
+   縦に積まれる。パソコンなら収まるが、幅400pxでは合計650pxになり、
+   上限の62vh（＝528px）に入りきらず巻物になる。地図には38%しか残らない。
+
+   ここでやることは、文字を減らして地図の取り分を増やすこと。
+   はじめて来た人に効くのは、読ませる説明より、地図が動いているところである。
+
+   ただし2つは残す。
+     ・乗り物の帯　　線路・道路・海・空を走り分けるので、説明文より雄弁
+     ・出典と、送信についての断り　　どちらも消してよい種類の文ではない
+   --------------------------------------------------------------------------- */
+@media (max-width: 520px) {
+  /* 中身が入りきる高さにする。ここを詰めすぎると巻物になり、
+     いちばん下の出典が切れる。表示が利用条件なので、切ってはいけない。 */
+  body.intro #side { max-height: 44vh; }
+
+  /* 題字と副題を一行に並べる */
+  body.intro #brand { display: flex; align-items: baseline; flex-wrap: wrap;
+    gap: 9px; padding: 9px 14px 7px; }
+  body.intro #brand h1 { font-size: 20px; letter-spacing: 5px; text-indent: 5px;
+    margin-bottom: 0; }
+  body.intro #brand p { font-size: 9px; letter-spacing: 1.5px; margin: 0; }
+
+  #introSteps { padding: 7px 12px 2px; }
+
+  /* 3つの手順は、丸と名前を横に並べた一行にする。
+     何をするかは、すぐ下の帯が見せてくれる。 */
+  #introFlow { margin: 0 0 2px; align-items: center; }
+  #introFlow .st { display: flex; align-items: center; justify-content: center; gap: 5px; }
+  #introFlow .ic { width: 20px; height: 20px; margin: 0; font-size: 10px; }
+  #introFlow .nm { font-size: 10px; letter-spacing: .5px; }
+  #introFlow .ds { display: none; }
+  #introFlow .ar { padding-bottom: 0; font-size: 11px; width: 10px; }
+
+  #introDemo { height: 38px; margin-bottom: 0; }
+
+  /* 何が流れているかの説明はしまう。地図がそれを見せている。
+     送信についての断りだけは残す。 */
+  body.intro #introSteps .note .what { display: none; }
+  body.intro #introSteps .note { font-size: 9.5px; line-height: 1.75;
+    padding: 6px 2px 4px; }
+  body.intro #introSteps .note .privacy { margin-top: 0; }
+
+  body.intro #searchBox { padding: 7px 12px 0; }
+  body.intro #q { padding: 9px 11px; font-size: 12.5px; }
+
+  #account { padding: 6px 12px 8px; }
+  #account .who .lbl { font-size: 10px; }
+  #account .btn.sm { padding: 6px 10px; }
+
+  /* 出典は表示が利用条件なので消さない。小さく畳んで残す。 */
+  #credits { padding: 6px 12px 8px; font-size: 8.5px; line-height: 1.6; }
+  #credits .checks { margin-top: 4px; padding-top: 4px; }
+
+  /* 並べ替えと削除は指で押す。22pxでは小さすぎるので広げる。 */
+  .item .ops { gap: 5px; }
+  .item .ops button { width: 32px; height: 32px; font-size: 14px; }
+
+  /* -------------------------------------------------------------------------
+     紹介カードは、地図の下端へ寄せる
+
+     縦置きでは地図の帯そのものが短い。カードを中央に置くと、
+     いま光っている地点も、そこへ伸びる線も、カードの裏に隠れてしまう。
+     下端に寄せて低く畳めば、地図の上半分が空いたまま残る。
+     ------------------------------------------------------------------------- */
+  #introCard { left: 3vw; right: 3vw; width: auto; bottom: 8px;
+    max-height: calc(var(--mapH, 40vh) - 16px); }
+  /* 右の列を4段に分けて、上から順に詰める。
+
+     もとの組み方は、日付と地名を同じ1段目に置き、地名を margin で
+     押し下げていた。1段目の高さは左の写真で決まるので、写真が高いと
+     そのぶん日付と本文が離れて、あいだに空白ができる。
+     段を分けておけば、それぞれの中身の高さで素直に積まれる。 */
+  #introCard .frame { padding: 7px; gap: 0 9px; align-items: start;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+    grid-template-rows: auto auto auto auto; }
+  #introCard .lead { grid-column: 1; grid-row: 1 / span 4;
+    align-self: start; aspect-ratio: 4 / 3; }
+  #introCard .dt { grid-column: 2; grid-row: 1; }
+  #introCard .nm { grid-column: 2; grid-row: 2; margin-top: 1px; }
+  #introCard .tx { grid-column: 2; grid-row: 3; margin-top: 4px; }
+  #introCard .wy { grid-column: 2; grid-row: 4; }
+
+  /* 小さい写真の列は、ここではしまう。代表の1枚で足りる。 */
+  #introCard .strip { display: none; }
+
+  #introCard .dt { font-size: 9px; letter-spacing: 1px; }
+  #introCard .nm { font-size: 12px; letter-spacing: 1px; }
+  /* 本文は3行で切る。続きは地図の上で起きていることが語る。 */
+  #introCard .tx { font-size: 10px; line-height: 1.65;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; }
+  #introCard .wy { font-size: 9px; margin-top: 3px; padding-top: 3px; }
+}
+
 </style>
 </head>
 <body class="mode-edit">
@@ -912,19 +1220,22 @@ body.odpt-open #odptPanel { display: flex; }
         <path class="rt air" d="M22 46 L 278 20" />
         <circle class="pin" cx="22" cy="46" r="4" />
         <circle class="pin b" cx="278" cy="20" r="4" />
-        <text class="tr v1 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚅</text>
-        <text class="tr v2 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚗</text>
-        <text class="tr v3 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🏍️</text>
-        <text class="tr v4" style="offset-path: path('M22 46 L 278 20')">✈️</text>
-        <text class="tr v5 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚢</text>
-        <text class="tr v6 flip" style="offset-path: path('M22 46 C 70 46, 84 16, 128 18 S 206 44, 278 20')">🚲</text>
+        <text class="tr v1 flip">🚅</text>
+        <text class="tr v2 flip">🚗</text>
+        <text class="tr v3 flip">🏍️</text>
+        <text class="tr v4">✈️</text>
+        <text class="tr v5 flip">🚢</text>
+        <text class="tr v6 flip">🚲</text>
       </svg>
 
-      <div class="note">いま地図に流れているのは、札幌から那覇まで日本を縦断した旅の記録です。
-        鉄道・フェリー・バス・車・飛行機を乗り継いでいます。鉄道は実際の線路を、
-        車は実際の道路を、船は実際の定期航路をたどり、飛行機は地球の丸みに沿った
-        最短の経路を通ります。<br><br>
-        入力した内容はこのブラウザの中だけで扱われ、どこにも送信されません。</div>
+      <div class="note">
+        <span class="what">いま地図に流れているのは、札幌から那覇まで日本を縦断した九日間の記録です。
+          鉄道・フェリー・バス・車・飛行機を乗り継いでいます。この線は想像で引いたものではありません。
+          列車は本物の線路を、車は道路を、船は就航中の航路をたどり、
+          飛行機だけが地球の丸みに沿って飛びます。</span>
+        <span class="privacy">作った旅程は、このブラウザの中に留まります。サーバーへ送られるのは、
+          ログインして「サーバーに保存」を押したときだけです。</span>
+      </div>
     </div>
 
     <div id="guide">
@@ -956,30 +1267,36 @@ body.odpt-open #odptPanel { display: flex; }
       <div id="empty">まだ何も追加されていません<br>上の検索欄から、旅の出発地を探してください</div>
     </div>
 
-    <div id="adSlot">
-      <div class="lbl">広告</div>
-      <div class="box" id="adBox">
-        ここに広告が入ります<br><span>300 × 250</span>
-      </div>
-      <div class="note">
-        ストーリー再生中は表示されません ・
-        <button id="adPref" class="linkish">広告について</button>
-      </div>
-    </div>
-
     <div id="tools">
       <button class="btn" id="addBtn">＋ 地図をクリックして追加</button>
       <button class="btn primary" id="storyBtn" disabled>▶ ストーリーを見る</button>
       <div class="grid2">
-        <button class="btn sm" id="shareBtn">共有リンク</button>
-        <button class="btn sm" id="saveBtn">JSON保存</button>
+        <button class="btn sm" id="saveBtn"
+          title="旅程を写真ごと1つのファイルにして、この端末に保存します">ファイルに保存</button>
+        <button class="btn sm" id="loadBtn"
+          title="保存したファイルを読み込みます">ファイルから開く</button>
       </div>
       <div class="grid2">
-        <button class="btn sm" id="loadBtn">JSON読込</button>
+        <button class="btn sm" id="shareBtn"
+          title="旅程を埋め込んだURLを作ります（写真は入りません）">共有リンク</button>
         <button class="btn sm" id="clearBtn">全部消す</button>
       </div>
-      <div class="grid2">
-        <button class="btn sm" id="odptBtn">鉄道データ確認</button>
+    </div>
+
+    <!-- サーバーへの保存。config.js に鍵が入っていないときは押せない。 -->
+    <div id="account">
+      <div class="who">
+        <span class="lbl"></span>
+      </div>
+      <div class="out">
+        <button class="btn sm" id="loginBtn">ログイン</button>
+      </div>
+      <div class="in">
+        <div class="grid2">
+          <button class="btn sm" id="cloudSaveBtn">サーバーに保存</button>
+          <button class="btn sm" id="cloudOpenBtn">サーバーから開く</button>
+        </div>
+        <button class="btn sm" id="logoutBtn">ログアウト</button>
       </div>
     </div>
 
@@ -987,9 +1304,16 @@ body.odpt-open #odptPanel { display: flex; }
          国土数値情報は出典の明記が利用条件、OpenStreetMap も表示が義務。
          隠すものではなく、むしろ「実際のデータを使っている」証しなので表に出す。 -->
     <div id="credits">
-      <div>鉄道・県境・海岸線・港　<b>国土数値情報</b>（国土交通省）</div>
+      <div>鉄道・港　<b>国土数値情報</b>（国土交通省）</div>
       <div>航路　<b>&copy; OpenStreetMap contributors</b>（ODbL）</div>
-      <div>空港　<b>OurAirports</b>　／　地図・道路　<b>Mapbox</b></div>
+      <div>空港　<b>OurAirports</b>　／　地図　<b>地理院タイル</b>（国土地理院）</div>
+      <div>地名検索　<b>地理院地名検索</b>（国土地理院）　／　道路の経路　<b>Mapbox</b></div>
+
+      <div class="legal"><a href="terms.html">利用規約</a>　／　<a href="privacy.html">プライバシーポリシー</a></div>
+
+      <!-- 点検口。壊れていなければ押す必要がないので、小さい字のほうへ置く。 -->
+      <div class="checks">うまく動かないとき　<button id="odptBtn">鉄道データを確認</button>
+        ／<button id="acctCheck">サーバー接続を確認</button></div>
     </div>
   </div>
 
@@ -1010,10 +1334,11 @@ body.odpt-open #odptPanel { display: flex; }
       <div class="ttl"></div>
       <div class="acts">
         <select id="baseStyle" class="btn sm" title="地図の見た目">
-          <option value="sat">航空写真</option>
-          <option value="std">Standard(3D)</option>
+          <option value="photo">航空写真</option>
+          <option value="pale">淡色地図</option>
         </select>
         <button class="btn sm" id="playBtn">▶ 自動再生</button>
+        <button class="btn sm" id="ttBtn" title="行程表の表示を切り替える">行程表</button>
         <button class="btn sm" id="editBtn">← 編集に戻る</button>
       </div>
     </div>
@@ -1028,6 +1353,12 @@ body.odpt-open #odptPanel { display: flex; }
     </div>
 
     <div id="story"><div class="inner" id="storyInner"></div></div>
+
+    <!-- 行程表。中身は renderTimetable() で作る。 -->
+    <div id="ttable">
+      <div class="hd"><b>行程</b><span></span></div>
+      <div class="rows"></div>
+    </div>
 
     <div id="storyNav">
       <button class="step-btn" id="prevBtn">◀ 戻る</button>
@@ -1060,31 +1391,24 @@ body.odpt-open #odptPanel { display: flex; }
   </div>
 </div>
 
-<div id="consent">
-  <div class="inner">
-    <div class="txt">
-      <b>Cookieと広告について</b>
-      <p>
-        「すべて許可」を選ぶと、興味に合わせた広告（パーソナライズ広告）が表示されます。
-        「必要なものだけ」でも、ページの内容に合わせた広告は表示されます。
-        入力した旅の記録はブラウザの中だけで扱われ、どこにも送信されません。
-        <a href="#" onclick="return false;">プライバシーポリシー</a>
-      </p>
-    </div>
-    <div class="acts">
-      <button id="cNec">必要なものだけ</button>
-      <button id="cAll" class="ok">すべて許可</button>
-    </div>
-  </div>
-</div>
-
-<div id="odptPanel">
+<div id="odptPanel" class="sheet">
   <div class="inner">
     <div class="head">
       <b>鉄道データの確認</b>
       <button id="odptClose">閉じる</button>
     </div>
     <div class="body" id="odptOut"></div>
+  </div>
+</div>
+
+<!-- サーバーの窓。中身は用によって差し替える（接続の確認・ログイン・保存した旅） -->
+<div id="supaPanel" class="sheet">
+  <div class="inner">
+    <div class="head">
+      <b id="supaTitle"></b>
+      <button id="supaClose">閉じる</button>
+    </div>
+    <div class="body" id="supaOut"></div>
   </div>
 </div>
 
@@ -1099,7 +1423,8 @@ body.odpt-open #odptPanel { display: flex; }
 <div id="toast"></div>
 <input type="file" id="jsonFile" accept="application/json" style="display:none">
 
-<script src="https://unpkg.com/mapbox-gl@3/dist/mapbox-gl.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script>
 "use strict";
@@ -1112,31 +1437,90 @@ body.odpt-open #odptPanel { display: flex; }
    読み込むときに railTrack へ読み替える。 */
 const MODES = {
   railTrack: { label: '鉄道', ico: '🚆', api: null, shape: 'track',
+    tint: '#2f6f8f', ink: '#1b4f63',
     travel: { zoom: 8.4, pitch: 48, ms: 14000, min: 7000, max: 16000, samples: 5, look: 0.09 } },
 
   /* バスは道路を走る。以前は直線で結んでいたが、それでは山も海も突っ切ってしまう。
      バス専用の経路案内は無いので、車と同じ道路の経路をたどる。 */
   transit: { label: 'バス', ico: '🚌', api: 'driving',
+    tint: '#b1712c', ink: '#8a5314',
     travel: { zoom: 9.6, pitch: 52, ms: 5600, min: 3400, max: 7000, samples: 3, look: 0.10 } },
 
   driving: { label: '車', ico: '🚗', api: 'driving',
+    tint: '#6f7a44', ink: '#4c5527',
     travel: { zoom: 11.2, pitch: 60, ms: 15000, min: 6000, max: 16000, samples: 6, look: 0.12 } },
 
   walking: { label: '徒歩', ico: '🚶', api: 'walking',
+    tint: '#8a8478', ink: '#5f6d7c', dash: true,
     travel: { zoom: 14.8, pitch: 64, ms: 90000, min: 5000, max: 13000, samples: 6, look: 0.10 } },
 
   cycling: { label: '自転車', ico: '🚴', api: 'cycling',
+    tint: '#4a7c59', ink: '#2f5b3c',
     travel: { zoom: 13.2, pitch: 62, ms: 34000, min: 5500, max: 14000, samples: 6, look: 0.11 } },
 
   ferry: { label: 'フェリー', ico: '🚢', api: null, shape: 'sea', bend: 0.03,
+    tint: '#2b8ca6', ink: '#136279',
     travel: { zoom: 6.4, pitch: 36, ms: 5600, min: 5000, max: 11000, samples: 3, look: 0.14 } },
 
   flight: { label: '飛行機', ico: '✈️', api: null, shape: 'air',
+    tint: '#7a5f9e', ink: '#4f3873', dash: true,
     travel: { zoom: 5.4, pitch: 34, ms: 5200, min: 5000, max: 10000, samples: 3, look: 0.15 } }
 };
 
-const JAPAN_CENTER = [138.2, 37.0];
-const JAPAN_ZOOM = 4.6;
+const JAPAN_ZOOM = 4.6;              // 控え。地図の大きさがまだ取れないときだけ使う
+const JAPAN_CENTER = [137.1, 38.5];  // 控えの中心。下の japanView が使えないときだけ
+
+/* 日本がちょうど収まる見え方（中心と倍率）を、そのときの地図の大きさから求める。
+
+   もとは中心 [138.2, 37.0]・倍率 4.6 の決め打ちだった。窓の形が変わっても
+   同じなので、地図が横に広くて縦に低いときに日本が小さな島になっていた。
+
+   倍率だけを計算に変えたが、それでは足りなかった。中心が固定のままだと、
+   倍率は「日本が収まる大きさ」でも、置き場所がずれていて北海道が切れる。
+   メルカトル図法では緯度が高いほど縦に引き伸ばされるので、
+   日本の南北の真ん中は 37.0 度ではなく 38.5 度あたりにある。
+   1.5度ぶん南に寄せて写していたことになる。
+
+   なので中心も範囲から出す。横と縦それぞれに要る倍率を出して小さいほうを採り、
+   中心は範囲の真ん中（縦はメルカトル上での真ん中）に置く。 */
+const JAPAN_BOUNDS = { west: 128.0, east: 146.2, south: 30.2, north: 45.8 };
+
+// メルカトル図法での縦位置（0が北端、1が南端）
+function mercatorY(lat) {
+  return (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2;
+}
+
+// その逆。縦位置から緯度へ戻す。
+function latOfY(y) {
+  return Math.atan(Math.exp((1 - 2 * y) * Math.PI)) * 360 / Math.PI - 90;
+}
+
+function japanView() {
+  const el = document.getElementById('map');
+  const w = el ? el.clientWidth : 0;
+  const h = el ? el.clientHeight : 0;
+
+  const yN = mercatorY(JAPAN_BOUNDS.north), yS = mercatorY(JAPAN_BOUNDS.south);
+  const center = [(JAPAN_BOUNDS.west + JAPAN_BOUNDS.east) / 2, latOfY((yN + yS) / 2)];
+
+  if (!w || !h) return { center: center, zoom: JAPAN_ZOOM };
+
+  const pad = 0.88;   // 縁にすこし余白を残す
+  const dx = (JAPAN_BOUNDS.east - JAPAN_BOUNDS.west) / 360;
+  const dy = yS - yN;
+
+  /* 世界一周ぶんの幅は 512 × 2^倍率 で数える。
+
+     ここを 256 で数えていて、出る倍率がまるまる一段高かった。
+     タイルの画像が256px四方なので釣られたが、MapLibre が倍率の基準にしているのは
+     512 のほう。おかげで「収まる倍率」のつもりで、収まらない倍率を出していた。
+     実測でも、見えている範囲が計算の半分しかなかった。 */
+  const world = 512;
+
+  const zx = Math.log2(w * pad / (world * dx));
+  const zy = Math.log2(h * pad / (world * dy));
+  return { center: center, zoom: Math.max(3, Math.min(zx, zy)) };
+}
 
 let spots = [];
 let tripName = '';
@@ -1170,28 +1554,213 @@ function legacyMode(m) { return (!m || m === 'rail') ? 'railTrack' : m; }
 
 function stationRole(i) { return i === 0 ? '乗車駅' : '乗換駅'; }
 
-mapboxgl.accessToken = MAPBOX_TOKEN;
+/* ---------------------------------------------------------------------------
+   地図の下地
+
+   Mapbox から国土地理院のタイルへ移した。理由は費用で、
+   Mapbox は地図を1つ作るたびに課金される。試算したところ、
+   月5万PVを超えたあたりから、広告収入より地図代のほうが速く増えていた。
+
+   地図ライブラリも Mapbox GL JS から MapLibre GL JS へ替えてある。
+   Mapbox GL JS は v2 以降、タイルを他社に替えても
+   地図を作った時点で課金対象になるため、ライブラリごと替えないと意味がない。
+
+   代わりに手放したもの:
+     ・3Dの起伏（Mapboxの標高タイル）。傾きだけは残る
+     ・道路や地名のベクター表示。写真と淡色地図はどちらも画像タイル
+
+   地理院の写真は z=18 までしか無い。旅情が地点で寄るのは 15.2 なので
+   ふだんは足りるが、利用者が手で寄せると引き伸ばしになる。
+   --------------------------------------------------------------------------- */
+
+const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" ' +
+                 'target="_blank" rel="noopener">地理院タイル</a>（国土地理院）';
+
+/* 日本の外を埋める世界の衛星画像。NASA が配っているもので、無料・鍵不要。
+   タイルの並びが {z}/{y}/{x} で、ふつうの {z}/{x}/{y} と縦横が逆になっている。 */
+const NASA_MAX_Z = 8;
+const NASA_URL = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' +
+                 'BlueMarble_ShadedRelief_Bathymetry/default/' +
+                 'GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg';
+const NASA_ATTR = '<a href="https://www.earthdata.nasa.gov/data/tools/gibs" ' +
+                  'target="_blank" rel="noopener">NASA EOSDIS GIBS</a>';
+
+/* ---------------------------------------------------------------------------
+   航空写真の「撮影範囲の外」を海で埋める
+
+   地理院の航空写真は日本の領域しか持っていない。低い倍率のタイルでは、
+   その外側が rgb(52,52,52) の平らな灰色で塗られて返ってくる。
+   日本を丸ごと映すと、本州の東に大きな灰色の楔として見える。
+
+   幸い、この灰色はぴたり1色だった（実測：楔の面積の8〜30%を占め、
+   他の色は最大でも0.7%。本物の海は青が強く 7〜16,10〜31,20〜46 の範囲で、
+   灰色と数値が重ならない）。だから色で見分けて置き換えられる。
+
+   置き換える色は決め打ちにせず、そのタイル自身の海の平均色を使う。
+   タイルごとに海の濃さが違うので、決め打ちだと継ぎ目が出る。
+
+   タイルを作り直すのは低い倍率のときだけ。高い倍率では灰色は出ないので
+   （範囲外はタイルそのものが返ってこない）、何もせずそのまま渡す。
+   --------------------------------------------------------------------------- */
+
+const SEA_FILL_MAX_Z = 8;      // ここまでの倍率だけ手を入れる
+const VOID_RGB = 52;           // 撮影範囲外を示す灰色
+const VOID_TOL = 4;            // 圧縮でわずかに揺れるぶんの許容
+
+const SEA_FALLBACK = [10, 17, 40];
+
+function isVoid(r, g, b) {
+  return Math.abs(r - VOID_RGB) <= VOID_TOL &&
+         Math.abs(g - VOID_RGB) <= VOID_TOL &&
+         Math.abs(b - VOID_RGB) <= VOID_TOL;
+}
+
+// 青が優勢な画素＝海。その平均をこのタイルの海の色とする。
+function seaAverage(d) {
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let p = 0; p < d.length; p += 4) {
+    const rr = d[p], gg = d[p + 1], bb = d[p + 2];
+    if (bb > rr + 6 && bb > gg + 3 && bb > 16 && bb < 120) { r += rr; g += gg; b += bb; n++; }
+  }
+  if (n < 400) return SEA_FALLBACK;
+  return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+}
+
+/* 撮影範囲の外を、そのタイル自身の海の平均色で塗る。
+
+   同じ画像から色を取るので、境目が出ない。のっぺりした一色にはなるが、
+   ここに出るのは日本から遠く離れた外洋で、拡大して眺める場所ではない。
+
+   NASA の衛星画像をこの穴に嵌め込んで色を合わせる作りも試した。理屈の上では
+   より正しく、タイルごとに色も揃ったが、並べて見比べても違いが分からなかった。
+   タイル1枚につき通信が2回になり、色を合わせる計算も要る。
+   見て分からないもののために払う代価としては高いので、この形に戻した。
+
+   低い倍率のときだけ手を入れる。高い倍率では灰色は出ない
+   （範囲外はタイルそのものが返ってこない）ので、そのまま渡す。 */
+async function fillVoid(buf) {
+  const bmp = await createImageBitmap(new Blob([buf]));
+  const c = new OffscreenCanvas(bmp.width, bmp.height);
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(bmp, 0, 0);
+  bmp.close();
+
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+
+  let voids = 0;
+  for (let p = 0; p < d.length; p += 4) {
+    if (isVoid(d[p], d[p + 1], d[p + 2])) voids++;
+  }
+  if (!voids) return buf;                       // 灰色が無ければ触らない
+
+  const sea = seaAverage(d);
+  for (let p = 0; p < d.length; p += 4) {
+    if (isVoid(d[p], d[p + 1], d[p + 2])) {
+      d[p] = sea[0]; d[p + 1] = sea[1]; d[p + 2] = sea[2];
+    }
+  }
+  g.putImageData(img, 0, 0);
+
+  const out = await c.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
+  return await out.arrayBuffer();
+}
+
+/* MapLibre に独自の取り出し口を足す。
+   タイルのURLを gsiphoto:// で始めると、ここを通ってから地図へ渡る。 */
+maplibregl.addProtocol('gsiphoto', async function (params) {
+  const url = params.url.replace(/^gsiphoto:\/\//, 'https://');
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('タイル: ' + res.status);
+  const buf = await res.arrayBuffer();
+
+  // 倍率はURLの .../{z}/{x}/{y}.jpg から読む
+  const m = /\/(\d+)\/\d+\/\d+\.jpg$/.exec(url);
+  const z = m ? +m[1] : 99;
+  if (z > SEA_FILL_MAX_Z) return { data: buf };
+
+  try {
+    return { data: await fillVoid(buf) };
+  } catch (err) {
+    console.warn('海を埋められませんでした', err);
+    return { data: buf };
+  }
+});
 
 const STYLES = {
-  sat: 'mapbox://styles/mapbox/satellite-streets-v12',
-  std: 'mapbox://styles/mapbox/standard'
+  photo: { name: '航空写真', url: 'gsiphoto://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+           max: 18, sea: true },
+  pale:  { name: '淡色地図', url: 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+           max: 18, sea: false }
 };
-let baseStyle = 'sat';
+let baseStyle = 'photo';
+
+function styleFor(key) {
+  const s = STYLES[key] || STYLES.photo;
+  const sources = {};
+  const layers = [];
+
+  /* 航空写真の下に、世界の衛星画像を敷く。
+
+     地理院の航空写真は日本の領域しか持っていない。持っていないところは
+     灰色で塗られて返ってくるか、そもそも返ってこない。
+     日本を丸ごと映すと本州の東に灰色の楔が出て、拡大すると
+     撮影範囲の切れ目から先が平らな一色になっていた。
+
+     下に本物の衛星画像を敷いておけば、そこが埋まる。
+     上に載る地理院の写真は不透明なので、日本の中の見え方は変わらない。
+
+     NASA の Blue Marble（陸の陰影と海の水深を合わせたもの）を使う。
+     実在の観測にもとづく画像で、無料、鍵も要らない。z8までしか無いので、
+     それより拡大すると引き伸ばされてぼやけるが、外洋には模様が無いので
+     平らな一色よりは海らしく見える。 */
+  if (s.sea) {
+    sources.world = { type: 'raster', tiles: [NASA_URL], tileSize: 256,
+                      maxzoom: NASA_MAX_Z, attribution: NASA_ATTR };
+
+    /* そのまま敷くと、境目で色が変わって見える。海の平均色を測った結果：
+
+         地理院  z5〜z12  明度 23〜29   彩度 0.58〜0.66
+         NASA    z5〜z8   明度 31〜53   彩度 0.81〜0.82
+
+       地理院は拡大率を通してほぼ一定。ずれているのは NASA のほうで、
+       彩度は安定しているが明度が大きく振れる。Blue Marble が水深の陰影を
+       持っているので、浅い海ほど明るく出るためで、
+       これは拡大率ではなく場所によって変わる。
+
+       彩度は落とせば全域で揃う（航空写真は大気の霞を通すので灰色がかり、
+       衛星の合成画像にはそれが無い、という一定の差）。
+       明度は平均どうしを合わせることしかできない。水深による濃淡は
+       本物の海の姿でもあるので、潰しきらずに残している。 */
+    layers.push({ id: 'world', type: 'raster', source: 'world',
+      paint: { 'raster-saturation': -0.25, 'raster-brightness-max': 0.78 } });
+  }
+
+  sources.base = { type: 'raster', tiles: [s.url], tileSize: 256,
+                   maxzoom: s.max, attribution: GSI_ATTR };
+  layers.push({ id: 'base', type: 'raster', source: 'base' });
+
+  return { version: 8, sources: sources, layers: layers };
+}
 
 const STOP_ZOOM = 15.2;
 const STOP_PITCH = 64;
 const TRAVEL_ZOOM = 8.6;
 const TRAVEL_PITCH = 48;
 
-const map = new mapboxgl.Map({
+const map = new maplibregl.Map({
   container: 'map',
-  style: STYLES[baseStyle],
-  center: JAPAN_CENTER,
-  zoom: JAPAN_ZOOM,
+  style: styleFor(baseStyle),
+  center: japanView().center,
+  zoom: japanView().zoom,
   pitch: 0,
   antialias: false,
-  language: 'ja',
   renderWorldCopies: false,
+
+  /* 出典の帯は自分で1つだけ足す。
+     既定のままだと MapLibre が自前の帯をもう1つ作り、
+     地図の隅に帯が2本、あいだに拡大縮小ボタンが挟まる形になっていた。 */
+  attributionControl: false,
   refreshExpiredTiles: false,
 
   // タイルを何枚まで手元に置いておくか。
@@ -1207,8 +1776,9 @@ const map = new mapboxgl.Map({
   maxTileCacheSize: 120
 });
 
-map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
-
+/* 下の隅に入れたものは、足した順とは逆に、後から足したものが上へ来る。
+   出典の帯を先に足し、拡大縮小のボタンを後から足すことで、
+   ボタンが上、長い帯が下、という並びになる。 */
 /* 出典は地図の帰属表示に常時出す。
    ・鉄道（国土数値情報）: 出典の明記が利用条件
    ・航路（OpenStreetMap）: 出典の明記に加えて、
@@ -1216,12 +1786,14 @@ map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
      ページそのものが ODbL になるわけではない。
    ・空港（OurAirports）: パブリックドメインなので条件としての義務は無いが、
      先方が謝意を求めているので出す。 */
-map.addControl(new mapboxgl.AttributionControl({
+map.addControl(new maplibregl.AttributionControl({
   compact: true,
   customAttribution: '鉄道: <b>国土数値情報（鉄道データ）国土交通省</b>' +
                      ' ・ 航路: <b>© OpenStreetMap contributors</b>' +
                      ' ・ 空港: <b>OurAirports</b>'
 }));
+map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
 
 /* ---------------------------------------------------------------------------
    地図が出せないときの案内
@@ -1259,38 +1831,50 @@ map.on('error', function (e) {
 });
 
 /* 上のどれにも当てはまらないまま、いつまでも地図が出てこない場合。
-   boot() は地図の下地が整ったときに動くので、それが来ないなら何かおかしい。 */
-setTimeout(function () { if (!booted) showMapFail('net'); }, 20000);
 
-function isStandard() { return baseStyle === 'std'; }
+   以前はここで「起動したかどうか」を見ていた。しかし起動は style.load を
+   きっかけにしており、それが来ないことが実際にあった。すると画面は
+   編集画面のまま何も起きず、20秒後に失敗の知らせだけが出ることになる。
+
+   見るべきは起動ではなく、地図が一度でも描けたかどうか。 */
+let mapReady = false;
+map.on('load', function () { mapReady = true; });
+setTimeout(function () { if (!mapReady) showMapFail('net'); }, 20000);
+
+/* 地形の起伏は載せない。
+
+   Mapbox の標高タイルは有料で、地理院の標高タイルは独自のPNG形式なので
+   MapLibre がそのままでは読めない（詰め直す処理を書いても、
+   タイル1枚のPNG化に約1秒かかって地形がちらつく）。
+   費用と手間に対して見合わないと判断した。
+
+   傾き（pitch）は標高が無くても効く。地面は平らなまま、
+   斜めから見おろす画になる。旅情の見せ場はここなので、そちらは残す。 */
+/* 起動は一度だけ。style.load からでも、下の保険からでも、先に来たほうで動く。
+
+   経路の層を作るところで例外が出ても、起動は止めない。
+   ここで止まると boot() まで届かず、利用者から見れば
+   「何も起きないまま待たされる」画面になってしまう。 */
+function bootOnce() {
+  if (booted) return;
+  booted = true;
+  try { addRouteLayers(); } catch (err) { console.warn('経路の層を作れませんでした', err); }
+  boot();
+}
 
 map.on('style.load', function () {
-  if (isStandard()) {
-    map.setConfigProperty('basemap', 'lightPreset', 'dusk');
-    map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
-  }
+  if (!booted) { bootOnce(); return; }
 
-  if (!map.getSource('mapbox-dem')) {
-    map.addSource('mapbox-dem', {
-      type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-      tileSize: 512, maxzoom: 14
-    });
-  }
-  map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.15 });
-
-  if (!map.getLayer('sky')) {
-    map.addLayer({ id: 'sky', type: 'sky',
-      paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun-intensity': 8 } });
-  }
-
+  // 地図の下地を切り替えたとき（航空写真↔淡色地図）は、層を作り直して描き直す
   addRouteLayers();
-
-  roadSaved = null;
-  if (introOn) muteRoads(true);
-
-  if (!booted) { booted = true; boot(); }
-  else { drawRoute(routeUpTo(spots.length - 1)); renderMarkers(); }
+  drawRoute(routeUpTo(spots.length - 1));
+  renderMarkers();
 });
+
+/* style.load が来ないまま止まることがある（実際に再現した）。
+   地図が万全でなくても、旅程を作る画面は動く。待ちすぎずにこちらから始める。
+   ふつうは1秒とかからず style.load が来るので、この保険は出番が無い。 */
+setTimeout(bootOnce, 5000);
 
 function addRouteLayers() {
   if (!map.getSource('route')) {
@@ -1299,11 +1883,20 @@ function addRouteLayers() {
       data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
     });
   }
-  const slot = isStandard() ? 'middle' : undefined;
+  /* 下から順に、ぼかし・縁取り・本体。
 
+     本体は生成りの白1色なので、暗い海や森の上では読めるが、
+     雪・雲・市街地・淡色地図のような明るい地面では沈んでしまう。
+     光っているのも水色の淡いぼかしなので、明るい側では助けにならない。
+
+     そこで本体の下に、少し太い暗い線を敷く。
+     白い線に暗い縁を添えるのは、明暗どちらの地面にも載せるための定石で、
+     地面が暗いときは縁が背景に紛れるので、見え方はほとんど変わらない。 */
   const defs = [
     { id: 'route-glow', width: ['interpolate', ['linear'], ['zoom'], 4, 7, 12, 16],
       color: '#7fd3e8', opacity: 0.26, blur: 1.5 },
+    { id: 'route-case', width: ['interpolate', ['linear'], ['zoom'], 4, 4.8, 12, 8.6],
+      color: '#0f1a28', opacity: 0.55, blur: 0.6 },
     { id: 'route-line', width: ['interpolate', ['linear'], ['zoom'], 4, 2.2, 12, 4.5],
       color: '#f5f1e8', opacity: 0.97, blur: 0 }
   ];
@@ -1316,7 +1909,6 @@ function addRouteLayers() {
       paint: { 'line-color': d.color, 'line-width': d.width,
                'line-opacity': d.opacity, 'line-blur': d.blur }
     };
-    if (slot) layer.slot = slot;
     map.addLayer(layer);
   });
 }
@@ -1851,8 +2443,20 @@ async function linesNear(ds, p) {
    実際に確かめたところ、同名の組み合わせ2,487件のうち909件が別の場所の駅だった。
    なので座標が1.5km以内にあるときだけ、乗り換えできるとみなす。 */
 const TRANSFER_NEAR = 1.5;        // km
-const TRANSFER_MAX_LINES = 4;     // 使う路線は4本まで（＝乗り換えは3回まで）
+/* 使ってよい路線の本数。乗り換えの回数はこれより1つ少ない。
+
+   4本にしていたが、それでは日本を縦に貫く旅程が引けなかった。
+   鹿児島中央から新函館北斗までは、九州・山陽・東海道・東北・北海道の
+   新幹線を継ぐので、それだけで5本要る。足りないと道筋が見つからず、
+   経路は直線に落ちてしまう。
+
+   探索は路線を1本につき1回しか辿らないので、上限を上げても
+   探す手間はほとんど増えない。増えるのは、見つかった道筋の
+   路線ごとに線路をたどる時間のほう。 */
+const TRANSFER_MAX_LINES = 8;
 const TRANSFER_DETOUR = 3.0;      // 直線距離の何倍までなら遠回りを許すか
+const TRANSFER_FAST_KM = 300;     // これより遠ければ、新幹線を通る道筋を先に試す
+const TRANSFER_WIDTH = 600;       // 同じ段で抱える道筋の上限（増えすぎを防ぐ）
 
 let railLinkCache = null;
 
@@ -1935,13 +2539,40 @@ async function railTransferSegment(a, b, mustUse) {
 
   const link = await railLinks();
 
-  // 乗り換えの少ない道筋から順に取り出す
+  /* 遠い旅では、新幹線の枝から先に配る。
+
+     同じ乗り換え回数の道筋がいくつもあるとき、抱えきれる数には限りがある。
+     配る順に詰めていくので、先に回した枝が残る。
+     ここを在来線任せにすると、鹿児島中央から新函館北斗までが
+     「鹿児島線で博多まで」という道筋になり、300km以上を在来線で
+     たどることになって線路を追えず、経路が直線に落ちていた。 */
+  if (dist(a, b) * 111 > TRANSFER_FAST_KM) {
+    const idx = await lineIndex(RAIL);
+    const rank = function (id) {
+      const m = idx.lines.find(function (l) { return l.id === id; });
+      return (m && m.category === 'shinkansen') ? 0 : 1;
+    };
+    from = from.slice().sort(function (x, y) { return rank(x.id) - rank(y.id); });
+  }
+
+  /* 乗り換えの少ない道筋から順に取り出す。
+
+     使った路線に印を付けるのは「その段を配り終えてから」にする。
+     配りながら印を付けていくと、同じ長さの道筋が複数あっても
+     先に手を挙げた1本だけが残り、あとは締め出される。
+
+     鹿児島中央から新函館北斗までが直線になっていたのは、これが理由だった。
+     鹿児島線から入る道筋が先に山陽新幹線を押さえてしまい、
+     九州新幹線から入る道筋が消えていた。残った1本は
+     在来線で300km以上たどることになり、線路を追えずに失敗していた。 */
   const seen = {};
   let queue = from.map(function (l) { seen[l.id] = true; return [l.id]; });
   let paths = [];
 
   while (queue.length && !paths.length) {
     const next = [];
+    const levelSeen = {};
+
     for (let i = 0; i < queue.length; i++) {
       const path = queue[i];
       const last = path[path.length - 1];
@@ -1949,6 +2580,7 @@ async function railTransferSegment(a, b, mustUse) {
       // 1本だけの道筋は、呼び出し元がすでに試して駄目だったもの
       if (path.length > 1 && goal[last]) { paths.push(path); continue; }
       if (path.length >= TRANSFER_MAX_LINES) continue;
+      if (next.length >= TRANSFER_WIDTH) continue;
 
       const nb = link.get(last);
       if (!nb) continue;
@@ -1957,19 +2589,40 @@ async function railTransferSegment(a, b, mustUse) {
       nb.forEach(function (coords, other) { others.push(other); });
       for (let j = 0; j < others.length; j++) {
         const other = others[j];
-        if (seen[other]) continue;
+        if (seen[other]) continue;              // 前の段までに使った路線は飛ばす
         if (await blocked(other)) continue;
-        seen[other] = true;
+        levelSeen[other] = true;                // この段のぶんは、あとでまとめて印を付ける
         next.push(path.concat([other]));
       }
     }
+
+    Object.keys(levelSeen).forEach(function (k) { seen[k] = true; });
     queue = next;
   }
   if (!paths.length) return null;
 
   const straight = dist(a, b);
 
-  for (let p = 0; p < Math.min(paths.length, 4); p++) {
+  /* 同じ乗り換え回数の道筋が並んだとき、どれから試すか。
+
+     遠い旅ほど、実際に人が使うのは新幹線である。在来線でつなぐ道筋は
+     線路を数百kmたどることになり、失敗しやすいうえに現実的でもない。
+     遠いときだけ、新幹線の多い道筋を先に回す。
+     （在来線を指定した人には、そもそも新幹線が候補に入っていない） */
+  if (straight * 111 > TRANSFER_FAST_KM && paths.length > 1) {
+    const idx = await lineIndex(RAIL);
+    const fast = function (path) {
+      return path.filter(function (id) {
+        const m = idx.lines.find(function (l) { return l.id === id; });
+        return m && m.category === 'shinkansen';
+      }).length;
+    };
+    const score = {};
+    paths.forEach(function (p) { score[p.join('|')] = fast(p); });
+    paths.sort(function (x, y) { return score[y.join('|')] - score[x.join('|')]; });
+  }
+
+  for (let p = 0; p < Math.min(paths.length, 6); p++) {
     const path = paths[p];
 
     // 乗換駅を決める。候補が複数あるときは、遠回りが少なくなるものを選ぶ。
@@ -2142,7 +2795,7 @@ async function fetchRoad(profile, points) {
   }).join(';');
 
   const url = 'https://api.mapbox.com/directions/v5/mapbox/' + profile + '/' + coordStr +
-    '?geometries=geojson&overview=full&access_token=' + mapboxgl.accessToken;
+    '?geometries=geojson&overview=full&access_token=' + MAPBOX_TOKEN;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error('Directions API: ' + res.status);
@@ -2214,7 +2867,7 @@ async function buildLegBetween(a, b) {
 
     /* どの空港を使ったかは編集画面で知らせたいので覚えておく。
        ただし地点そのものには書き込まない。
-       JSON保存は地点をそのまま書き出すので、
+       ファイルへの保存は地点をそのまま書き出すので、
        利用者のファイルに勝手な情報が混ざってしまう。 */
     legAir[key] = { from: air.from, to: air.to };
     if (b.id !== undefined) flightAirports[b.id] = legAir[key];
@@ -2455,6 +3108,29 @@ const GLIDE_SPEED = 0.22;   // 景色が流れる速さ（画面/秒）。移動
 const GLIDE_EDGE = 0.20;    // 出入りで先読みを効かせる区間（前後それぞれ）
 const GLIDE_ZOOM_MS = 1400; // 動き出す前に引く／着いてから寄る時間
 
+/* 旅程の再生で、動き出す前にその場で引く時間。
+
+   以前は引く動きを flyAlong の中に任せていた。あそこでは加速と同じ
+   区間（全体の15%）で引ききるので、7秒の区間だと約1秒で
+   15.2から8.4まで下がる。1秒で6段階以上は、目が追いつかない。
+
+   出発地から離れる前に、止まったままゆっくり引く。
+   引き終わってから滑り出すので、動きが2つ重ならない。
+   はじめの画面が前からやっていたのと同じ運び方である。 */
+const STEP_ZOOM_OUT_MS = 1700;
+
+/* 出発の引きを、動く前に済ませてしまう。
+   flyAlong には引き終わった高さから始めてもらう。 */
+async function pullBack(i, alive) {
+  const tv = travelFor(i);
+  const tz = NORTH_UP ? travelZoomFor(legs[i], tv) : tv.zoom;
+
+  map.easeTo({ center: spots[i].coord, zoom: tz, pitch: tv.pitch,
+               duration: STEP_ZOOM_OUT_MS, essential: true });
+  await sleep(STEP_ZOOM_OUT_MS);
+  return alive() ? tz : null;
+}
+
 function flyAlong(coords, duration, o) {
   return new Promise(function (resolve) {
     if (!coords || coords.length < 2) { resolve(); return; }
@@ -2502,6 +3178,7 @@ function flyAlong(coords, duration, o) {
 
       let t = (now - t0) / duration;
       if (t > 1) t = 1;
+      if (opt.onProgress) opt.onProgress(t);
       // 北を上に固定しているときは、直線に沿った位置を一定の速さで進める。
       // 経路の長さで測ると、曲がったところで進みが鈍って速度が揺れる。
       let at, gAlong = 0, d;
@@ -2594,7 +3271,7 @@ const INTRO_SPOTS = [
   { name: '札幌', wiki: ['札幌市時計台', '大通公園', 'すすきの'], coord: [141.3507, 43.0687],
     date: '2026年8月1日', mode: 'railTrack', via: [],
     note: '朝いちばんの札幌駅。まだ人のまばらな改札を抜けて、南へ向かう列車に乗った。'
-        + 'ここから那覇まで二千キロ。地図の上では、ただの一本の線になる。',
+        + 'ここから那覇まで、地図の上に一本の線を引いていく。',
     zoom: 15.2, pitch: 60, bearing: 20 },
 
   /* 函館線 → 千歳線 → 室蘭線。経由地は路線どうしが実際に接する点。
@@ -2608,8 +3285,8 @@ const INTRO_SPOTS = [
     via: [ { c: [141.4372, 43.0472], n: '白石' },
            { c: [141.6930, 42.6720], n: '沼ノ端' },
            { c: [141.5958, 42.6393], n: '苫小牧' } ],
-    note: '千歳線で南へ二時間。苫小牧の駅からフェリーターミナルまではバスに乗り換える。'
-        + '夕方の港は貨物の匂いがして、乗船を待つ車の列が長かった。',
+    note: '千歳線で南へ一時間あまり。苫小牧の駅からフェリーターミナルまではバスに乗り換える。'
+        + '夕方の港は潮と重油の匂いがして、乗船を待つ車の列が長かった。',
     zoom: 14.4, pitch: 56, bearing: 160 },
 
   /* 太平洋を南下する実際の航路。
@@ -2620,14 +3297,14 @@ const INTRO_SPOTS = [
     date: '2026年8月2日', mode: 'ferry', via: [],
     note: '船で一晩かけて太平洋を南下する。'
         + '夜中に甲板へ出ると、陸の灯りはもうずいぶん遠く、'
-        + '波の音だけがずっと続いていた。朝、大洗の港に着いた。',
+        + '波の音だけがずっと続いていた。昼過ぎ、大洗の港に着いた。',
     zoom: 13.6, pitch: 52, bearing: 240 },
 
   { name: '東京', wiki: ['東京駅', '丸の内'], coord: [139.7671, 35.6812],
     date: '2026年8月2日', mode: 'transit', via: [],
     note: '大洗からバスで都心へ。'
         + '海沿いの町から高速に乗ると、景色が少しずつ建物に変わっていく。'
-        + '赤煉瓦の駅舎に着いたころには、もう昼を回っていた。',
+        + '赤煉瓦の駅舎の前に立ったころには、もう夕方になっていた。',
     zoom: 15.4, pitch: 62, bearing: 140 },
 
   { name: '大阪', wiki: ['大阪城', '道頓堀'], coord: [135.5259, 34.6873],
@@ -2641,14 +3318,14 @@ const INTRO_SPOTS = [
   { name: '広島', wiki: ['原爆ドーム', '広島平和記念公園'], coord: [132.4536, 34.3955],
     date: '2026年8月7日', mode: 'driving', via: [],
     note: '車を借りて山陽路を西へ。'
-        + '瀬戸内の海が右手に見えたり隠れたりを繰り返す。'
+        + '瀬戸内の海が左手に見えたり隠れたりを繰り返す。'
         + '日が傾くころ広島に着いて、川沿いをしばらく歩いた。',
     zoom: 15.6, pitch: 58, bearing: 60 },
 
   { name: '那覇', wiki: ['首里城', '国際通り (那覇市)'], coord: [127.7195, 26.2170],
     date: '2026年8月9日', mode: 'flight', via: [],
     note: '広島空港から那覇へ飛ぶ。'
-        + '雲の切れ間から見えた海の色が、本州のそれとはまるで違っていた。'
+        + '雲の切れ間から見えた海の色が、ここまで見てきた海とはまるで違っていた。'
         + '首里城の石垣に着いて、この旅はここで終わる。',
     zoom: 15.2, pitch: 60, bearing: 210 }
 ];
@@ -2670,56 +3347,9 @@ let introOn = false;
 let introSeq = 0;
 const introImages = {};
 
-const MUTE_OPACITY = 0.15;
-const MUTE_COLOR = '#ddd6c7';
-let roadSaved = null;
-
-function mutableLineIds() {
-  const ids = [];
-  try {
-    (map.getStyle().layers || []).forEach(function (l) {
-      if (l.type !== 'line') return;
-      if (l.id === 'route-line' || l.id === 'route-glow') return;
-      const sl = l['source-layer'] || '';
-      if (sl === 'road' || sl === 'admin' || /^(road|bridge|tunnel|admin)/.test(l.id)) ids.push(l.id);
-    });
-  } catch (e) { }
-  return ids;
-}
-
-function muteRoads(on) {
-  const ids = mutableLineIds();
-
-  if (on) {
-    if (!roadSaved) {
-      roadSaved = {};
-      ids.forEach(function (id) {
-        try {
-          roadSaved[id] = {
-            o: map.getPaintProperty(id, 'line-opacity'),
-            c: map.getPaintProperty(id, 'line-color')
-          };
-        } catch (e) { }
-      });
-    }
-    ids.forEach(function (id) {
-      try {
-        map.setPaintProperty(id, 'line-opacity', MUTE_OPACITY);
-        map.setPaintProperty(id, 'line-color', MUTE_COLOR);
-      } catch (e) { }
-    });
-    return;
-  }
-
-  if (!roadSaved) return;
-  Object.keys(roadSaved).forEach(function (id) {
-    try {
-      map.setPaintProperty(id, 'line-opacity', roadSaved[id].o);
-      map.setPaintProperty(id, 'line-color', roadSaved[id].c);
-    } catch (e) { }
-  });
-  roadSaved = null;
-}
+/* 以前は、はじめの画面のあいだ道路や県境の線を薄くしていた。
+   経路の線を目立たせるためだったが、下地が画像タイルになったので
+   薄くできる線がそもそも無い。仕組みごと外した。 */
 
 async function decodeAhead(url) {
   if (!url) return null;
@@ -2816,11 +3446,181 @@ document.addEventListener('visibilitychange', function () {
   }
 });
 
+/* ---------------------------------------------------------------------------
+   はじめの画面の帯（探す・つなぐ・見るの下を走る乗り物）
+
+   もとは CSS の offset-path と @keyframes で動かしていた。
+   線の上を進む動き・地面の入れ替え・線を引く動きが、それぞれ別の
+   アニメーションとして並んでいて、6台ぶんの負の待ち時間で順番を作っていた。
+
+   iPhone で破綻していた。実機の録画をコマ送りで測ったところ、
+   新幹線は左端で少し進んだだけで消え、次の車は右端に現れて
+   そこに3.6秒座り込み、そのあと5秒間なにも走らなかった。
+   offset-distance が期待どおりに補間されていない。
+
+   ここでは時計をひとつにして、位置も見せ消しも毎フレーム自分で決める。
+   getPointAtLength は SVG の基本の機能で、どのブラウザでも同じ答えを返す。
+   おまけに、地面と乗り物が別の時計を持たなくなるので、
+   「車が線路の上を走っている」ようなずれが原理的に起きなくなる。
+   --------------------------------------------------------------------------- */
+
+const STRIP_EACH = 4400;                    // 1台の持ち時間
+const STRIP_RUN = 3854;                     // そのうち走っている時間
+const STRIP_CYCLE = STRIP_EACH * 6;         // 6台で一周
+const STRIP_FADE = 140;                     // 地面の入れ替えに使う時間
+const STRIP_DASH = 263.1;                   // 曲線の長さ（引く動きに使う）
+
+/* 何台目がどの地面を走るか。並び順は
+   新幹線・車・バイク・飛行機・船・自転車。 */
+const STRIP_GROUND = ['rail', 'road', 'road', 'sky', 'sea', 'road'];
+
+let stripRaf = 0;
+let stripT0 = 0;
+let strip = null;
+
+function stripPick() {
+  const svg = $('#introDemo');
+  if (!svg) return null;
+  const q = function (sel) { return [].slice.call(svg.querySelectorAll(sel)); };
+
+  const curve = svg.querySelector('.rt:not(.air)');
+  const air = svg.querySelector('.rt.air');
+  if (!curve || !air) return null;
+
+  return {
+    curve: curve, air: air,
+    curveLen: curve.getTotalLength(),
+    airLen: air.getTotalLength(),
+    pinB: svg.querySelector('.pin.b'),
+    surfaces: q('.surfaces'),
+    veh: q('.tr'),
+    /* 絵文字の多くは左を向いている。線は左から右へ進むので、
+       そのままだと後ろ向きに走って見える。飛行機だけは元から
+       右上を向いているので裏返さない。 */
+    flip: q('.tr').map(function (n) { return n.classList.contains('flip'); }),
+    ground: {
+      rail: q('.sf.railBed, .sf.railTie, .sf.railOut, .sf.railIn'),
+      road: q('.sf.roadEdge, .sf.roadBed, .sf.roadMid'),
+      sea:  q('.sf.seaBg, .sf.seaWaves'),
+      sky:  q('.sf.skyBg, .sf.cloud')
+    }
+  };
+}
+
+/* いまどの地面を、どれだけの濃さで見せるか。
+   持ち時間の終わりぎわだけ、次の地面と重ねて入れ替える。 */
+function stripGroundMix(phase) {
+  const slot = Math.floor(phase / STRIP_EACH) % 6;
+  const here = STRIP_GROUND[slot];
+  const mix = {};
+  mix[here] = 1;
+
+  const left = STRIP_EACH - (phase - slot * STRIP_EACH);
+  if (left < STRIP_FADE) {
+    const next = STRIP_GROUND[(slot + 1) % 6];
+    if (next !== here) {
+      const k = 1 - left / STRIP_FADE;
+      mix[here] = 1 - k;
+      mix[next] = k;
+    }
+  }
+  return mix;
+}
+
+function stripFrame(now) {
+  if (!introOn || !strip) { stripRaf = 0; return; }
+
+  const t = now - stripT0;
+  const phase = t % STRIP_CYCLE;
+
+  // 線を引く。最初の一度だけで、あとは引かれたまま。
+  const drawn = Math.min(1, t / STRIP_RUN);
+  strip.curve.style.strokeDashoffset = (STRIP_DASH * (1 - easeInOut(drawn))).toFixed(2);
+
+  // 地面は、線が引かれてから出す。途中で枕木が先に並ぶと順序が逆に見える。
+  const shown = Math.max(0, Math.min(1, (t - STRIP_RUN) / 500));
+  strip.surfaces.forEach(function (g) { g.style.opacity = shown; });
+
+  const mix = stripGroundMix(phase);
+  Object.keys(strip.ground).forEach(function (k) {
+    const v = mix[k] || 0;
+    strip.ground[k].forEach(function (n) { n.style.opacity = v; });
+  });
+
+  // 飛行機の番だけ、線は曲線から直線（飛行機雲）に替わる
+  const air = mix.sky || 0;
+  strip.curve.style.opacity = 1 - air;
+  strip.air.style.opacity = air;
+
+  if (strip.pinB) {
+    strip.pinB.style.opacity = Math.max(0, Math.min(1, (t - STRIP_RUN) / 300));
+  }
+
+  strip.veh.forEach(function (node, i) {
+    let p = phase - i * STRIP_EACH;
+    if (p < 0) p += STRIP_CYCLE;
+
+    // 出番の前後は消しておく。線の終わりで待たせない。
+    if (p > STRIP_RUN + 260) { node.style.opacity = 0; return; }
+
+    const onAir = (i === 3);
+    const path = onAir ? strip.air : strip.curve;
+    const len = onAir ? strip.airLen : strip.curveLen;
+    const pt = path.getPointAtLength(easeInOut(Math.min(1, p / STRIP_RUN)) * len);
+
+    /* 位置と左右の向きを、SVG の transform 属性ひとつで与える。
+
+       絵文字は原点を中心に描かれているので、scale(-1 1) はその場で裏返る。
+       translate を先に書いてあるぶん、裏返してから運ぶ順になる。
+       CSS の transform と違って、どこを軸にするかの解釈が
+       ブラウザによって変わらない。 */
+    node.setAttribute('transform',
+      'translate(' + pt.x.toFixed(2) + ' ' + pt.y.toFixed(2) + ')' +
+      (strip.flip[i] ? ' scale(-1 1)' : ''));
+
+    let o = 1;
+    if (p < 200) o = p / 200;
+    else if (p > STRIP_RUN) o = 1 - (p - STRIP_RUN) / 260;
+    node.style.opacity = Math.max(0, o);
+  });
+
+  stripRaf = requestAnimationFrame(stripFrame);
+}
+
+function startStrip() {
+  stopStrip();
+  strip = stripPick();
+  if (!strip || !strip.curveLen) return;
+  stripT0 = performance.now();
+  stripRaf = requestAnimationFrame(stripFrame);
+}
+
+function stopStrip() {
+  if (stripRaf) cancelAnimationFrame(stripRaf);
+  stripRaf = 0;
+}
+
 function startIntro() {
   if (introOn) return;
   introOn = true;
   document.body.classList.add('intro');
-  muteRoads(true);
+
+  /* 日本が収まる倍率を、ここで取り直す。
+
+     地図を作る時点ではまだ body.intro が付いておらず、パネルが上に来るか
+     左に来るかが決まっていない。つまり地図の高さも確定していない。
+     その高さで測ると小さく出てしまい（実測 327px、正しくは 491px）、
+     待っているあいだ日本が豆粒のまま置かれることになる。
+
+     この行は class を足した直後にあるので、読んだ時点で高さは確定している。
+     経路ができるまで最大9秒この画面が続くので、ここの見え方は効く。 */
+  map.jumpTo(japanView());
+
+  // 帯は body.intro が付いてから測る（隠れていると長さが取れない）
+  startStrip();
+  /* デモの旅程を行程表へ写す。この時点では経路がまだ無いので距離は空欄になる。
+     経路ができたら runIntro が同じ旅程で描き直し、距離が入る。 */
+  renderTimetable(INTRO_SPOTS, introLegs);
   loadIntroImages();
   runIntro(++introSeq);
 }
@@ -2830,8 +3630,15 @@ function stopIntro() {
   introOn = false;
   introSeq++;
   document.body.classList.remove('intro');
+  stopStrip();
+  /* 「オープニングを読み込んでいます」も下ろす。
+     出しっぱなしにすると、地図が届く前に旅を作り始めた人の画面で、
+     最大9秒のあいだ意味のない札が地図に被る。 */
+  document.body.classList.remove('opening-wait');
+  // 行程表は利用者の旅程へ戻す（まだ2か所に満たなければ、そのまま消える）
+  renderTimetable(spots, legs);
   hideIntroCard();
-  muteRoads(false);
+  hideArrivePin();
   map.stop();
   map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   drawRoute([]);
@@ -2912,13 +3719,24 @@ function introPadding() {
   if (winW < 900) {
     return { top: Math.round(h * 0.34), bottom: 20, left: 20, right: 20 };
   }
-  const cardSpace = cardW + winW * 0.04 + 40;
-  return { top: 40, bottom: 40, left: 40, right: Math.round(Math.min(cardSpace, w * 0.5)) };
+  // 紹介カードと行程表は右で横に並ぶので、両方ぶんを空ける
+  const cardSpace = cardW + winW * 0.04 + 40 + ttSpace();
+  return { top: 40, bottom: 40, left: 40, right: Math.round(Math.min(cardSpace, w * 0.66)) };
 }
 
 function introBounds() {
-  const b = new mapboxgl.LngLatBounds();
+  const b = new maplibregl.LngLatBounds();
   INTRO_SPOTS.forEach(function (s) { b.extend(s.coord); });
+
+  /* 訪れた地点だけに合わせると、北海道の先が切り落とされる。
+
+     この旅の北の端は札幌で、北緯43.07度・東経141.35度。
+     しかし北海道はそこから北へ2度以上、東へ4度以上続いている。
+     地点に吸いつけて枠を決めると、島の残りが枠の外に出てしまう。
+
+     南と西は那覇（26.22度・127.72度）が押さえているので、
+     北東の角だけ日本の端まで広げれば、島が丸ごと入る。 */
+  b.extend([JAPAN_BOUNDS.east, JAPAN_BOUNDS.north]);
   return b;
 }
 
@@ -2943,6 +3761,9 @@ async function runIntro(my) {
   await buildIntroLegs();
   if (!introOn || my !== introSeq) return;
 
+  // 経路ができたので、距離の入った行程表に描き直す
+  renderTimetable(INTRO_SPOTS, introLegs);
+
   /* 何周も回し続けない。
 
      ずっと動いていると、見ていないあいだもCPUを使い続ける。
@@ -2954,6 +3775,7 @@ async function runIntro(my) {
     round++;
     map.setPadding(introPadding());
     drawRoute([]);
+    ttReset();
 
     map.fitBounds(introBounds(), {
       padding: 30, bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
@@ -2986,8 +3808,10 @@ async function runIntro(my) {
 
       // ここまでの経路を描いておく（再生と同じ見え方にする）
       drawRoute(introRouteUpTo(i));
+      ttAt(i);
 
       showIntroCard(s, i);
+      showArrivePin(s.coord);
       if (NORTH_UP) {
         // 移動の高さから、この地点の高さへゆっくり寄る
         map.easeTo({ center: s.coord, zoom: s.zoom + 0.3, pitch: s.pitch,
@@ -3000,6 +3824,7 @@ async function runIntro(my) {
       if (!introOn || my !== introSeq) break;
 
       hideIntroCard();
+      hideArrivePin();
       await sleep(INTRO_OUT);
       if (!introOn || my !== introSeq) break;
 
@@ -3033,7 +3858,8 @@ async function runIntro(my) {
           zoomStart: NORTH_UP ? tz : s.zoom,
           zoomEnd: NORTH_UP ? tz : next.zoom,
           pitchStart: NORTH_UP ? tv.pitch : s.pitch,
-          pitchEnd: NORTH_UP ? tv.pitch : next.pitch
+          pitchEnd: NORTH_UP ? tv.pitch : next.pitch,
+          onProgress: function (t) { ttRun(i, t); }
         });
       }
     }
@@ -3045,6 +3871,7 @@ async function runIntro(my) {
 
   // 止まるときは、旅の全体が見える形にしておく
   if (introOn && my === introSeq) {
+    ttAt(INTRO_SPOTS.length - 1);
     map.setPadding(introPadding());
     drawRoute(introRouteUpTo(INTRO_SPOTS.length - 1));
     map.easeTo({ center: introBounds().getCenter(), bearing: 0, pitch: 0,
@@ -3147,6 +3974,20 @@ function renderAll() {
   $('#topbar .ttl').textContent = tripName || defaultTripName();
 }
 
+/* 順番を入れ替える。
+
+   もともとドラッグでも並べ替えられるが、あれはマウスでしか効かない
+   （画面を触って操作する機械では、そもそも掴む動作が起きない）。
+   矢印なら、指でも鍵盤でも同じように押せる。 */
+async function moveSpot(from, to) {
+  if (to < 0 || to >= spots.length || from === to) return;
+  const moved = spots.splice(from, 1)[0];
+  spots.splice(to, 0, moved);
+  selectedId = moved.id;
+  await rebuild();
+  fitAll(900);
+}
+
 function renderList() {
   const box = $('#list');
   box.innerHTML = '';
@@ -3183,9 +4024,24 @@ function renderList() {
     row.className = 'row';
     row.innerHTML = '<span class="grip" title="ドラッグで並べ替え">⠿</span>' +
       '<div class="no">' + (i + 1) + '</div><div class="nm"></div>' +
-      '<div class="ops"><button data-act="del">×</button></div>';
+      '<div class="ops">' +
+        (spots.length > 1
+          ? '<button data-act="up" title="ひとつ前へ">↑</button>' +
+            '<button data-act="down" title="ひとつ後ろへ">↓</button>'
+          : '') +
+        '<button data-act="del" title="この場所を消す">×</button>' +
+      '</div>';
     row.querySelector('.nm').textContent = s.name || '(名称未設定)';
     el.appendChild(row);
+
+    const up = row.querySelector('[data-act=up]');
+    const down = row.querySelector('[data-act=down]');
+    if (up) {
+      up.disabled = (i === 0);
+      down.disabled = (i === spots.length - 1);
+      up.addEventListener('click', function (e) { e.stopPropagation(); moveSpot(i, i - 1); });
+      down.addEventListener('click', function (e) { e.stopPropagation(); moveSpot(i, i + 1); });
+    }
 
     const grip = row.querySelector('.grip');
     grip.addEventListener('mousedown', function () { el.draggable = true; });
@@ -3209,10 +4065,8 @@ function renderList() {
       el.classList.remove('over');
       const from = Number(e.dataTransfer.getData('text/plain'));
       const to = Number(el.dataset.i);
-      if (isNaN(from) || from === to) return;
-      const moved = spots.splice(from, 1)[0];
-      spots.splice(to, 0, moved);
-      await rebuild();
+      if (isNaN(from)) return;
+      await moveSpot(from, to);
     });
 
     const dt = document.createElement('div');
@@ -3518,7 +4372,8 @@ function buildEditForm(s, index) {
 
   f.innerHTML =
     legHtml +
-    '<label>場所の名前</label><input type="text" data-f="name">' +
+    '<label>場所の名前</label><input type="text" data-f="name" autocomplete="off">' +
+    '<div class="nameSug"></div>' +
     '<label>日付</label><input type="text" data-f="date" placeholder="2024.05">' +
     '<label>思い出</label><textarea data-f="note" rows="4" placeholder="そのとき何を見て、何を思ったか"></textarea>' +
     '<label>写真</label><input type="file" class="file" accept="image/*" data-f="photo">';
@@ -3575,6 +4430,51 @@ function buildEditForm(s, index) {
   f.querySelector('[data-f=date]').value = s.date || '';
   f.querySelector('[data-f=note]').value = s.note || '';
 
+  /* 名前を打ち直したら、そこでも場所を探せるようにする。
+
+     以前は検索欄でしか探せず、名前欄はただの文字入力だった。
+     一度置いた場所を選び直したい人が名前欄で打ち直しても
+     候補が出ず、名前だけが空になって「(名称未設定)」になっていた。
+
+     ここで選ぶと、名前と一緒に座標も置き換わる。 */
+  const nameInp = f.querySelector('[data-f=name]');
+  const sugBox = f.querySelector('.nameSug');
+  let nameTimer = null;
+  let nameSeq = 0;
+
+  nameInp.addEventListener('input', function () {
+    const text = nameInp.value.trim();
+    clearTimeout(nameTimer);
+    if (text.length < 2) { sugBox.innerHTML = ''; return; }
+
+    nameTimer = setTimeout(async function () {
+      const my = ++nameSeq;
+      let list = [];
+      try { list = await searchPlaces(text); } catch (err) { return; }
+      if (my !== nameSeq || !sugBox.isConnected) return;
+
+      sugBox.innerHTML = '';
+      // 打った文字とそっくり同じものだけのときは、出しても選ぶ意味がない
+      if (list.length === 1 && list[0].name === text) return;
+
+      list.slice(0, 5).forEach(function (r) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.innerHTML = '<b></b><span></span>';
+        row.querySelector('b').textContent = r.name;
+        row.querySelector('span').textContent = r.address || 'この場所に置き直す';
+        row.addEventListener('click', async function () {
+          s.name = r.name;
+          s.coord = [Number(r.coord[0].toFixed(5)), Number(r.coord[1].toFixed(5))];
+          await rebuild();
+          map.flyTo({ center: s.coord, zoom: 13.5, pitch: 55, duration: 1400, essential: true });
+          toast(r.name + ' に置き直しました');
+        });
+        sugBox.appendChild(row);
+      });
+    }, SEARCH_WAIT);
+  });
+
   f.querySelectorAll('input[type=text], textarea').forEach(function (inp) {
     inp.addEventListener('input', function () {
       s[inp.dataset.f] = inp.value;
@@ -3614,20 +4514,34 @@ function buildEditForm(s, index) {
     reader.readAsDataURL(file);
   });
 
-  if (MONETIZE.affiliate && s.name) {
-    const row = document.createElement('div');
-    row.className = 'affRow';
-    row.style.marginTop = '9px';
-    row.appendChild(makeAffLink(s, s.name + ' 周辺の宿を探す'));
-    f.appendChild(row);
-  }
-
   return f;
 }
 
 async function rebuild() {
   await buildAllLegs();
   renderAll();
+}
+
+/* 到着の印を立てる／仕舞う。
+
+   立つのは一度に1本だけなので、使い回さず作り直している。
+   同じ要素を動かすと、CSSの登場アニメーションが二度目から流れない。 */
+let arrivePin = null;
+
+function showArrivePin(coord) {
+  hideArrivePin();
+  if (!coord) return;
+  const el = document.createElement('div');
+  el.className = 'apin';
+  el.innerHTML = '<span class="body"><span class="ring"></span>' +
+                 '<span class="drop"></span><span class="dot"></span></span>';
+  // 先端が座標に来るように、下端を合わせる
+  arrivePin = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+    .setLngLat(coord).addTo(map);
+}
+
+function hideArrivePin() {
+  if (arrivePin) { arrivePin.remove(); arrivePin = null; }
 }
 
 function renderMarkers() {
@@ -3644,7 +4558,7 @@ function renderMarkers() {
       renderList(); renderMarkers();
       map.flyTo({ center: s.coord, zoom: 13, pitch: 55, duration: 1500, essential: true });
     });
-    markers.push(new mapboxgl.Marker({ element: el, anchor: 'center' })
+    markers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(s.coord).addTo(map));
 
     if (s.id === selectedId) {
@@ -3652,7 +4566,7 @@ function renderMarkers() {
         const ve = document.createElement('div');
         ve.className = 'vpin' + (k === 0 && isRail(s.mode) ? ' first' : '');
         ve.title = (isRail(s.mode) ? stationRole(k) + '：' : '') + (v.n || '');
-        viaMarkers.push(new mapboxgl.Marker({ element: ve, anchor: 'center' })
+        viaMarkers.push(new maplibregl.Marker({ element: ve, anchor: 'center' })
           .setLngLat(v.c).addTo(map));
       });
     }
@@ -3661,7 +4575,7 @@ function renderMarkers() {
 
 function fitAll(dur) {
   if (!spots.length) return;
-  const b = new mapboxgl.LngLatBounds();
+  const b = new maplibregl.LngLatBounds();
   const all = routeUpTo(spots.length - 1);
   (all.length ? all : spots.map(function (s) { return s.coord; }))
     .forEach(function (c) { b.extend(c); });
@@ -3760,42 +4674,178 @@ async function addSpot(o) {
   return s;
 }
 
-function focusNewItem() {
-  const card = document.querySelector('.item.sel');
-  if (!card) return;
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  const target = card.querySelector('[data-f=mode]') || card.querySelector('[data-f=date]');
-  if (target) target.focus();
-}
+/* 場所を1つ足したあと、人がまずやるのは「次の場所を探す」ことである。
+   検索欄の見出しも「次の場所を検索」に変わる。
 
+   以前はここで日付の欄へ焦点を移していた。すると、続けて地名を打った人の
+   文字が日付の欄に入ってしまい、候補が出てこないように見えていた。
+   焦点は検索欄に残し、そこが画面に入るところまで送る。
+   日付や思い出は、書きたくなった人が自分で押せばよい。 */
+function focusNewItem() {
+  const box = document.querySelector('#searchBox');
+  if (box) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const q = $('#q');
+  if (q) q.focus();
+}
 
 const SEARCH_WAIT = 500;
 let searchTimer = null;
 let searchSeq = 0;
 
-async function searchPlaces(text) {
-  const c = map.getCenter();
-  const url = 'https://api.mapbox.com/search/searchbox/v1/forward' +
-    '?q=' + encodeURIComponent(text) +
-    '&language=ja' +
-    '&country=jp' +
-    '&limit=6' +
-    '&proximity=' + c.lng.toFixed(4) + ',' + c.lat.toFixed(4) +
-    '&access_token=' + mapboxgl.accessToken;
+/* ---------------------------------------------------------------------------
+   場所を探す
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Search Box API: ' + res.status);
+   Mapbox の検索をやめ、2つの手元／無料の道具に置き換えた。
+
+     1. 駅　　 data/rail/stations.json（国土数値情報・8,505駅）
+              経路を引くのに元から積んでいるデータ。通信すら起きない。
+     2. 地名　 国土地理院の住所検索（msearch.gsi.go.jp）。無料。
+
+   旅情で探すものはたいてい駅なので、手元で当たれば通信が0回で済む。
+   駅を先に、地名を後に並べる。同じ場所が両方から出たら駅を残す。
+   --------------------------------------------------------------------------- */
+
+const GSI_SEARCH = 'https://msearch.gsi.go.jp/address-search/AddressSearch';
+
+let stationIndex = null;
+
+async function stations() {
+  if (stationIndex) return stationIndex;
+  const res = await fetch('data/rail/stations.json');
+  if (!res.ok) throw new Error('駅データ: ' + res.status);
   const json = await res.json();
 
-  return (json.features || []).map(function (f) {
-    const p = f.properties || {};
+  /* 使いやすい形に並べ替えておく。
+     同じ駅名が複数の路線にあるので、路線名も持たせて見分けられるようにする。 */
+  stationIndex = Object.keys(json.stations || {}).map(function (name) {
+    const uses = json.stations[name] || [];
     return {
-      name: p.name || p.name_preferred || '(名称不明)',
-      address: p.place_formatted || p.full_address || '',
-      cats: p.poi_category_ids || [],
-      coord: f.geometry.coordinates
+      name: name,
+      coord: uses[0].coord,
+      lines: uses.map(function (u) { return (u.line || '').split('_').pop(); })
     };
   });
+  return stationIndex;
+}
+
+// 探している文字に近い駅ほど上へ。前から一致するものを優先する。
+function stationScore(name, q) {
+  if (name === q) return 0;
+  if (name.indexOf(q) === 0) return 1;
+  if (name.indexOf(q) > 0) return 2;
+  return 9;
+}
+
+/* 「東京駅」と入れる人と「東京」と入れる人がいる。
+   国土数値情報は「東京」で持っているので、末尾の「駅」を外したものでも探す。 */
+function stationQueries(text) {
+  const q = text.trim();
+  const bare = q.replace(/駅$/, '');
+  return (bare && bare !== q) ? [q, bare] : [q];
+}
+
+async function searchStations(text, limit) {
+  let list;
+  try {
+    list = await stations();
+  } catch (err) {
+    console.warn('駅データを読めませんでした', err);
+    return [];
+  }
+
+  const qs = stationQueries(text);
+  const hit = [];
+  for (let i = 0; i < list.length; i++) {
+    let sc = 9;
+    for (let k = 0; k < qs.length; k++) {
+      sc = Math.min(sc, stationScore(list[i].name, qs[k]));
+    }
+    if (sc < 9) hit.push({ s: list[i], sc: sc });
+  }
+  hit.sort(function (a, b) {
+    if (a.sc !== b.sc) return a.sc - b.sc;
+    return a.s.name.length - b.s.name.length;
+  });
+
+  return hit.slice(0, limit).map(function (h) {
+    const ln = h.s.lines.slice(0, 2).join('・');
+    /* 国土数値情報は「東京」のように駅名だけを持っている。
+       そのまま地点の名前にすると、旅程に「東京」と並んで
+       街のことなのか駅のことなのか分からなくなる。「駅」を補う。 */
+    const nm = /駅$/.test(h.s.name) ? h.s.name : h.s.name + '駅';
+    return {
+      name: nm,
+      address: ln + (h.s.lines.length > 2 ? ' ほか' : ''),
+      cats: ['rail_station'],          // 駅の印。表示側がこれを見て駅と判断する
+      coord: h.s.coord
+    };
+  });
+}
+
+/* 地名は外に聞きに行く。返ってこないことがあるので、待つのは数秒まで。
+
+   ここで止まると、手元だけで足りる駅の候補まで出せなくなる。
+   実際「一度検索したあと、もう一度打っても候補が出ない」という
+   報せがあった。取りこぼしても駅は出す、という作りにしておく。 */
+const GSI_TIMEOUT = 3500;
+
+async function searchAddress(text, limit) {
+  let res;
+  const stop = new AbortController();
+  const timer = setTimeout(function () { stop.abort(); }, GSI_TIMEOUT);
+  try {
+    res = await fetch(GSI_SEARCH + '?q=' + encodeURIComponent(text), { signal: stop.signal });
+  } catch (err) {
+    console.warn('地名を探せませんでした', err);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) return [];
+
+  let json;
+  try { json = await res.json(); } catch (err) { return []; }
+  if (!Array.isArray(json)) return [];
+
+  const out = [];
+  const seen = {};
+  for (let i = 0; i < json.length && out.length < limit; i++) {
+    const f = json[i];
+    const p = (f && f.properties) || {};
+    const g = (f && f.geometry) || {};
+    if (!g.coordinates || !p.title) continue;
+
+    /* 地理院は「茨城県大洗」「茨城県東茨城郡大洗町」のように
+       同じ場所を粗さ違いで返す。座標が同じものは1つにまとめる。 */
+    const key = g.coordinates[0].toFixed(4) + ',' + g.coordinates[1].toFixed(4);
+    if (seen[key]) continue;
+    seen[key] = true;
+
+    out.push({ name: p.title, address: '', cats: [], coord: g.coordinates });
+  }
+  return out;
+}
+
+async function searchPlaces(text) {
+  // 手元の駅と、外の地名は同時に走らせる。遅いほうに引きずられない。
+  const both = await Promise.all([
+    searchStations(text, 4),
+    searchAddress(text, 12)
+  ]);
+  const st = both[0], ad = both[1];
+
+  /* 地理院は一文字でも当たると返してくる。「東京駅」で
+     「北海道札幌市東区」のような的外れが並ぶので、
+     入れた言葉（または「駅」を外したもの）を含むものだけ残す。 */
+  const qs = stationQueries(text);
+  const near = ad.filter(function (a) {
+    const wanted = qs.some(function (q) { return a.name.indexOf(q) >= 0; });
+    if (!wanted) return false;
+    // 駅と同じ場所を、地名側でもう一度出さない
+    return !st.some(function (s) { return dist(s.coord, a.coord) * 111 < 0.4; });
+  });
+
+  return st.concat(near).slice(0, 6);
 }
 
 $('#q').addEventListener('input', function () {
@@ -3866,10 +4916,6 @@ function renderResults(list) {
     const el = document.createElement('div');
     el.className = 'qr';
 
-    const isStation = r.cats.some(function (c) {
-      return /rail|train|station|transit|metro|subway/.test(c);
-    });
-
     const th = document.createElement('div');
     th.className = 'th';
     th.dataset.name = r.name;
@@ -3877,15 +4923,12 @@ function renderResults(list) {
     const txt = document.createElement('div');
     txt.className = 'tx';
 
+    /* 以前は駅に「駅」の札を添えていたが、名前そのものが
+       「東京駅」で終わるようになったので、札は重複になる。
+       駅かどうかは、下に並ぶ路線名で分かる。 */
     const n = document.createElement('div');
     n.className = 'n';
     n.textContent = r.name;
-    if (isStation) {
-      const t = document.createElement('span');
-      t.className = 'tag';
-      t.textContent = '駅';
-      n.appendChild(t);
-    }
 
     const a = document.createElement('div');
     a.className = 'a';
@@ -4052,7 +5095,6 @@ let prepSkipped = false;
 $('#skipBtn').addEventListener('click', function () { prepSkipped = true; });
 $('#mapFailRetry').addEventListener('click', function () { location.reload(); });
 
-
 function setPrep(msg, n, total) {
   $('#prep .st').textContent = msg;
   if (total) {
@@ -4188,7 +5230,16 @@ function mapSizeChanged() {
 
   clearTimeout(resizeTimer);
   // 引っぱっている最中は何度も呼ばれるので、落ち着いてから1回だけ
-  resizeTimer = setTimeout(function () { map.resize(); }, 120);
+  resizeTimer = setTimeout(function () {
+    map.resize();
+
+    /* 窓の形が変わると、日本が収まる倍率も変わる。
+       何も置いていない待ちの画面のときだけ、取り直す。
+       再生中やオープニングの最中に触ると、カメラの動きを壊してしまう。 */
+    if (!playing && !stepping && !introOn && !spots.length) {
+      map.easeTo(Object.assign(japanView(), { duration: 300 }));
+    }
+  }, 120);
 }
 
 mapSizeChanged();   // 最初の1回
@@ -4203,6 +5254,8 @@ $('#editBtn').addEventListener('click', function () { setMode('edit'); });
 
 async function setMode(m) {
   if (playing) stopPlay();
+  stopStepping();
+  hideArrivePin();   // 手で送っていた場合も、切り替えたら印は残さない
 
   document.body.classList.remove('mode-edit', 'mode-story', 'arming', 'arming-via', 'playing');
   document.body.classList.add('mode-' + m);
@@ -4233,7 +5286,7 @@ function showDetail(on) { document.body.classList.toggle('detail-on', on); }
    どこからどこへ動いたかは、すでに分かっている。
    それを題名にすれば、名前が無くても本物の題名として成立する。 */
 /* 表紙は文字が大きいので、日本語だとどこで折り返されるか分からない。
-   放っておくと「牧落駅から城 / 崎温泉へ」のように地名の途中で切れる。
+   放っておくと「仙台駅から新青 / 森駅へ」のように地名の途中で切れる。
    なので行の分かれ目もこちらで決めて、行ごとに返す。 */
 function defaultTripLines() {
   const named = spots.filter(function (s) { return (s.name || '').trim(); });
@@ -4310,10 +5363,6 @@ function renderStory() {
       inner.appendChild(ph);
     }
 
-    if (MONETIZE.affiliate && s.name) {
-      inner.appendChild(makeAffLink(s, s.name + ' 周辺の宿を探す'));
-    }
-
     c.appendChild(inner);
     box.appendChild(c);
   });
@@ -4324,7 +5373,192 @@ function renderStory() {
     '<p style="color:var(--muted);font-size:11px;margin-top:12px;letter-spacing:2px;">' +
     '旅情 &nbsp;RYOJO</p></div>';
   box.appendChild(end);
+
+  renderTimetable(spots, legs);
 }
+
+/* ---------------------------------------------------------------------------
+   行程表
+
+   地図の右側に立てる縦の一覧。乗換案内の見た目に寄せてある。
+
+   持っている情報は「場所・日付・乗り物・路線・経路の座標」で、時刻は無い。
+   なので時刻の代わりに、左の細い列には何番目の場所かを、
+   区間には乗り物と路線名と距離を出す。距離は経路の座標から測るので、
+   直線ではなく実際にたどる線路や道路の長さになる。
+
+   状態は2つだけ。
+     ttAt(i)      場所 i に停まっている（i より前の区間は塗り終わり）
+     ttRun(k, t)  区間 k を割合 t だけ進んでいる
+   自動再生も、進む・戻るも、はじめの画面のデモも、この2つを呼ぶだけで足りる。
+
+   写す旅程は renderTimetable() に渡す。利用者が組んだ旅程（spots／legs）と、
+   はじめの画面で流れるデモの旅程（INTRO_SPOTS／introLegs）は別物なので、
+   世界の変数を直に読まず、渡されたほうを覚えておいて使う。
+   --------------------------------------------------------------------------- */
+
+let ttRows = null;
+let ttSrc = { spots: [], legs: [] };
+
+function ttConf(mode) { return MODES[legacyMode(mode)] || MODES.railTrack; }
+
+// 区間 k（k 番目から k+1 番目へ）の長さ。km。
+function legKm(k) {
+  const leg = ttSrc.legs[k];
+  if (!leg || leg.length < 2) return 0;
+  const cum = cumulative(leg);
+  return cum[cum.length - 1] * 111;
+}
+
+function fmtKm(km) {
+  if (!km) return '';
+  return (km < 10 ? km.toFixed(1) : String(Math.round(km))) + 'km';
+}
+
+/* その区間で使った路線の名前。
+   区間まるごとに選んだ路線と、駅ごとに選んだ路線の両方から集める。 */
+function legLineNames(s) {
+  const out = [];
+  const add = function (ln) {
+    if (ln && ln.name && out.indexOf(ln.name) < 0) out.push(ln.name);
+  };
+  add(s.legLine);
+  viaList(s).forEach(function (v) { add(v.line); });
+  return out;
+}
+
+/* 乗り物の下に添える一行。
+
+   路線を選んであればその名前。選んでいなければ、通った駅や経由地の名前。
+   どちらも無いこともある（車で直行した、など）。その場合は何も出さない。 */
+function legSub(s) {
+  const lines = legLineNames(s);
+  if (lines.length) return lines.join('／');
+
+  const via = viaList(s).map(function (v) { return v.n; }).filter(Boolean);
+  return via.length ? '経由 ' + via.join('・') : '';
+}
+
+function buildTtStop(s, i) {
+  const el = document.createElement('div');
+  el.className = 'stop';
+  el.innerHTML = '<div class="no"></div><div class="rail"><i class="pin"></i></div>' +
+    '<div class="txt"><div class="nm"></div><div class="dt"></div></div>';
+
+  // 柱の色。上は来た区間、下はこれから行く区間。
+  if (i > 0) el.style.setProperty('--cu', ttConf(s.mode).tint);
+  if (i < ttSrc.spots.length - 1) {
+    el.style.setProperty('--cd', ttConf(ttSrc.spots[i + 1].mode).tint);
+  }
+
+  el.querySelector('.no').textContent = String(i + 1);
+  el.querySelector('.nm').textContent = s.name || '(名称未設定)';
+  el.querySelector('.dt').textContent = s.date || '';
+  return el;
+}
+
+// 区間 k は k+1 番目の乗り物で進む（mode は「ここへ来るときの乗り物」）
+function buildTtSeg(k) {
+  const s = ttSrc.spots[k + 1];
+  const conf = ttConf(s.mode);
+
+  const el = document.createElement('div');
+  el.className = 'seg' + (conf.dash ? ' dash' : '');
+  el.style.setProperty('--c', conf.tint);
+  el.style.setProperty('--ct', conf.ink);
+  el.style.setProperty('--p', '0%');
+  el.innerHTML = '<div class="no"></div>' +
+    '<div class="rail"><i class="track"></i><i class="fill"></i><i class="veh"></i></div>' +
+    '<div class="txt"><div class="md"></div><div class="ln"></div><div class="km"></div></div>';
+
+  el.querySelector('.veh').textContent = conf.ico;
+  el.querySelector('.md').textContent = conf.label;
+  el.querySelector('.ln').textContent = legSub(s);
+  el.querySelector('.km').textContent = fmtKm(legKm(k));
+  return el;
+}
+
+function renderTimetable(list, legList) {
+  const box = $('#ttable');
+  if (!box) return;
+  ttSrc = { spots: list || [], legs: legList || [] };
+
+  const rows = box.querySelector('.rows');
+  rows.innerHTML = '';
+  ttRows = { stops: [], segs: [] };
+
+  let total = 0;
+  for (let k = 0; k < ttSrc.spots.length - 1; k++) total += legKm(k);
+  box.querySelector('.hd span').textContent =
+    ttSrc.spots.length + ' か所' + (total ? '　' + fmtKm(total) : '');
+
+  ttSrc.spots.forEach(function (s, i) {
+    if (i > 0) {
+      const seg = buildTtSeg(i - 1);
+      ttRows.segs.push(seg);
+      rows.appendChild(seg);
+    }
+    const stop = buildTtStop(s, i);
+    ttRows.stops.push(stop);
+    rows.appendChild(stop);
+  });
+
+  document.body.classList.toggle('tt-on', ttSrc.spots.length >= 2);
+}
+
+/* 行程表が占めている幅。地図の余白（padding）を決めるときに使う。
+   隠れているとき（狭い窓・切り替えで消したとき）は 0 を返す。 */
+function ttSpace() {
+  const el = $('#ttable');
+  if (!el || getComputedStyle(el).display === 'none') return 0;
+  return el.getBoundingClientRect().width + 18;
+}
+
+// いま見せたい行を、なるべく真ん中に置く
+function ttScrollTo(el, now) {
+  if (!el) return;
+  const box = $('#ttable .rows');
+  if (!box) return;
+  const want = el.offsetTop - (box.clientHeight - el.offsetHeight) / 2;
+  box.scrollTo({ top: Math.max(0, want), behavior: now ? 'auto' : 'smooth' });
+}
+
+function ttAt(i, now) {
+  if (!ttRows) return;
+  ttRows.stops.forEach(function (el, k) {
+    el.classList.toggle('done', k < i);
+    el.classList.toggle('now', k === i);
+  });
+  ttRows.segs.forEach(function (el, k) {
+    const done = k < i;
+    el.classList.toggle('done', done);
+    el.classList.remove('run');
+    el.style.setProperty('--p', done ? '100%' : '0%');
+  });
+  if (i >= 0) ttScrollTo(ttRows.stops[i], now);
+}
+
+function ttReset() {
+  if (!ttRows) return;
+  ttAt(-1, true);
+  ttScrollTo(ttRows.stops[0], true);
+}
+
+function ttRun(k, t) {
+  if (!ttRows) return;
+  const el = ttRows.segs[k];
+  if (!el) return;
+  if (!el.classList.contains('run')) {
+    el.classList.add('run');
+    ttScrollTo(el);
+  }
+  el.style.setProperty('--p', (Math.max(0, Math.min(1, t)) * 100).toFixed(1) + '%');
+}
+
+$('#ttBtn').addEventListener('click', function () {
+  const off = document.body.classList.toggle('tt-off');
+  toast(off ? '行程表を隠しました' : '行程表を出しました');
+});
 
 let scrollSeq = 0;
 
@@ -4336,9 +5570,16 @@ async function gotoChapter(i) {
   const cam = camFor(i);
   cam.duration = 2600;
   cam.essential = true;
+  hideArrivePin();
   map.flyTo(cam);
   drawRoute(routeUpTo(i));
+
+  /* 印を立てるのは着いてから。
+     飛んでいる最中から出ていると、着く前に行き先が分かってしまい、
+     「いま着いた」という合図にならない。 */
+  await sleep(cam.duration);
   if (my !== scrollSeq) return;
+  showArrivePin(spots[i].coord);
 }
 
 /* ---------------------------------------------------------------------------
@@ -4376,6 +5617,10 @@ async function gotoStep(i, opt) {
 
   updateStepNav();
 
+  if (i === 0) ttReset();
+  else if (i === total - 1) ttAt(spots.length - 1);
+  else ttAt(i - 1);
+
   if (i === 0 || i === total - 1) {
     drawRoute(routeUpTo(spots.length - 1));
     fitAll(1400);
@@ -4389,16 +5634,106 @@ function updateStepNav() {
   const prev = $('#prevBtn'), next = $('#nextBtn'), now = $('#stepNow');
   if (!prev) return;
 
-  prev.disabled = stepIndex <= 0;
-  next.disabled = stepIndex >= total - 1;
+  /* 走っている最中は、進むボタンが飛ばすボタンになる。
+     戻るは押させない（途中から巻き戻す意味がないため）。 */
+  if (stepping) {
+    prev.disabled = true;
+    next.disabled = false;
+    next.textContent = 'スキップ ▶▶';
+  } else {
+    prev.disabled = stepIndex <= 0;
+    next.disabled = stepIndex >= total - 1;
+    next.textContent = '進む ▶';
+  }
 
   if (stepIndex === 0) now.textContent = 'はじめ';
   else if (stepIndex === total - 1) now.textContent = 'おわり';
   else now.textContent = stepIndex + ' / ' + spots.length;
 }
 
+/* ---------------------------------------------------------------------------
+   手で送るときも、経路の上を走る
+
+   以前は「進む」を押すと、次の地点へカメラが直に飛んでいた。
+   自動再生では線路や道路の上を追いかけるのに、手で送ると
+   瞬間移動になっていて、同じ旅程なのに別物に見えていた。
+
+   ここでは自動再生とまったく同じ flyAlong を通す。速さも同じ決め方。
+
+   ただし、待たされるのが嫌な人もいる。走っているあいだ「進む」は
+   「スキップ」に変わり、押せばその場で着く。
+   --------------------------------------------------------------------------- */
+
+let stepping = false;    // いま区間を走っている最中か
+let stepSkip = false;    // 走っている途中で飛ばされたか
+let stepSeq = 0;         // 走行の世代。途中で場面が変わったら捨てる
+
+// いまの章から次の章へ、走れる区間があるか
+function canTravelNext() {
+  const from = stepIndex - 1;
+  return from >= 0 && from < spots.length - 1 &&
+         legs[from] && legs[from].length > 1;
+}
+
+function stopStepping() {
+  stepSeq++;
+  stepping = false;
+  stepSkip = false;
+}
+
+async function travelToNext() {
+  const from = stepIndex - 1;
+  const to = from + 1;
+  const my = ++stepSeq;
+
+  stepping = true;
+  stepSkip = false;
+  updateStepNav();
+
+  // 出発する章の文章を出したまま走る（自動再生と同じ見え方）
+  drawRoute(routeUpTo(from));
+
+  const live = function () { return my === stepSeq && stepping && !stepSkip; };
+  const tz = await pullBack(from, live);
+  if (my !== stepSeq) return;
+
+  if (tz !== null) {
+    await flyAlong(legs[from], travelDuration(from), {
+      alive: live,
+      base: routeUpTo(from),
+      startBearing: NORTH_UP ? 0 : camFor(from).bearing,
+      endBearing: NORTH_UP ? 0 : camFor(to).bearing,
+      travel: travelFor(from),
+      zoomStart: tz, pitchStart: travelFor(from).pitch,
+      onProgress: function (t) { ttRun(from, t); }
+    });
+  }
+
+  if (my !== stepSeq) return;          // 途中で編集へ戻ったなど
+
+  const skipped = stepSkip;
+  stepping = false;
+  stepSkip = false;
+
+  // 飛ばされたときは、カメラがまだ途中にいるので着地させる
+  if (skipped) map.jumpTo(camFor(to));
+
+  drawRoute(routeUpTo(to));
+  // カメラはもう着いている（skipCamera なので gotoChapter は通らない）
+  showArrivePin(spots[to].coord);
+  await gotoStep(to + 1, { skipCamera: true });
+}
+
 function stepBy(d) {
   if (playing) stopPlay();
+
+  // 走っている最中の「進む」は、スキップとして働く
+  if (stepping) {
+    if (d > 0) stepSkip = true;
+    return;
+  }
+
+  if (d > 0 && canTravelNext()) { travelToNext(); return; }
   gotoStep(stepIndex + d);
 }
 
@@ -4425,13 +5760,15 @@ $('#playBtn').addEventListener('click', function () {
 function activateChapter(i) {
   // 自動再生中も、進む・戻ると同じ「いまどの章か」を共有する
   stepIndex = i + 1;
+  ttAt(i);
   stepEls().forEach(function (el, k) { el.classList.toggle('active', k === stepIndex); });
   updateStepNav();
 }
 
 function imageOf(s) {
   if (!s) return null;
-  if (s.photo) return { url: s.photo, src: null };
+  // photo は Data URL のことも、置き場所のことも、ふつうのURLのこともある
+  if (s.photo) return { url: photoSrc(s.photo), src: null };
   if (s.autoImg && s.autoImg.url) {
     return { url: s.autoImg.url, src: 'Wikipedia：' + (s.autoImg.title || '') };
   }
@@ -4473,6 +5810,7 @@ async function play() {
 
     activateChapter(i);
     drawRoute(routeUpTo(i));
+    showArrivePin(spots[i].coord);
     if (!playing) break;
 
     const hasPhoto = showPhoto(spots[i]);
@@ -4495,11 +5833,17 @@ async function play() {
     }
 
     if (i < spots.length - 1) {
+      hideArrivePin();               // ここを離れるので印を仕舞う
+      const tz = await pullBack(i, function () { return playing; });
+      if (tz === null) break;
+
       await flyAlong(legs[i], travelDuration(i), {
         startBearing: NORTH_UP ? 0 : camFor(i).bearing + 10,
         endBearing: NORTH_UP ? 0 : camFor(i + 1).bearing,
         base: routeUpTo(i),
-        travel: travelFor(i)
+        travel: travelFor(i),
+        zoomStart: tz, pitchStart: travelFor(i).pitch,
+        onProgress: function (t) { ttRun(i, t); }
       });
     }
   }
@@ -4518,6 +5862,7 @@ function stopPlay() {
   document.body.classList.remove('playing');
   scrollSeq++;
   hidePhoto();
+  hideArrivePin();
   $('#playBtn').textContent = '▶ 自動再生';
   showDetail(true);
   updateStepNav();
@@ -4526,8 +5871,15 @@ function stopPlay() {
 $('#baseStyle').addEventListener('change', function () {
   if (playing) stopPlay();
   baseStyle = $('#baseStyle').value;
-  map.setStyle(STYLES[baseStyle]);
-  toast(baseStyle === 'sat' ? '航空写真に切り替えました' : 'Standard(3D)に切り替えました');
+
+  /* diff: false を付けて、下地をまるごと積み直させる。
+
+     既定では MapLibre は新旧の差分だけを当てる。すると新しい下地には
+     経路もピンも入っていないので、差分として「消す」ほうだけが実行され、
+     style.load も発火しないため描き直す機会が来ない。
+     実際、切り替えたあとレイヤーが base だけになっていた。 */
+  map.setStyle(styleFor(baseStyle), { diff: false });
+  toast(STYLES[baseStyle].name + 'に切り替えました');
 });
 
 $('#tripName').addEventListener('input', function () {
@@ -4540,8 +5892,11 @@ $('#clearBtn').addEventListener('click', async function () {
   if (!spots.length) return;
   if (!confirm('追加した場所をすべて消しますか？（元に戻せません）')) return;
   spots = []; selectedId = null; legs = [];
+  // 画面を白紙にしただけで、サーバーに預けたものは消していない。
+  // 次に保存するときは、上書きではなく新しい旅程として入れる。
+  tripId = null;
   await rebuild();
-  map.easeTo({ center: JAPAN_CENTER, zoom: JAPAN_ZOOM, pitch: 0, bearing: 0, duration: 1500 });
+  map.easeTo(Object.assign(japanView(), { pitch: 0, bearing: 0, duration: 1500 }));
   toast('すべて消しました');
 });
 
@@ -4616,11 +5971,21 @@ $('#saveBtn').addEventListener('click', function () {
   const blob = new Blob([data], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = (tripName || 'tracelog').replace(/[^\w぀-ヿ一-龯-]+/g, '_') + '.json';
+  a.download = (tripName || defaultTripName() || '旅情').replace(/[^\w぀-ヿ一-龯-]+/g, '_') + '.json';
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('JSONを保存しました');
+  toast('ファイルに保存しました（写真も入っています）');
 });
+
+/* 保存した形（ファイル・サーバーで共通）から、spots を組み直す。
+   id は保存していないので、読み込むたびに振り直す。 */
+function spotsFrom(list) {
+  return (list || []).map(function (s) {
+    return { id: uid++, name: s.name, date: s.date, note: s.note, coord: s.coord,
+             mode: legacyMode(s.mode), via: viaList(s),
+             legLine: s.legLine || null, photo: s.photo || null };
+  });
+}
 
 $('#loadBtn').addEventListener('click', function () { $('#jsonFile').click(); });
 
@@ -4633,143 +5998,20 @@ $('#jsonFile').addEventListener('change', function (e) {
       const obj = JSON.parse(reader.result);
       stopIntro();
       tripName = obj.name || '';
-      spots = (obj.spots || []).map(function (s) {
-        return { id: uid++, name: s.name, date: s.date, note: s.note, coord: s.coord,
-                 mode: legacyMode(s.mode),
-                 via: viaList(s),
-                 photo: s.photo || null };
-      });
+      spots = spotsFrom(obj.spots);
       selectedId = null;
+      tripId = null;   // 別の旅程になったので、保存先も新しく作り直す
       $('#tripName').value = tripName;
       await rebuild();
       fitAll();
       toast('読み込みました');
     } catch (err) {
-      alert('JSONを読み込めませんでした: ' + err.message);
+      alert('このファイルは読み込めませんでした: ' + err.message);
     }
   };
   reader.readAsText(file);
   e.target.value = '';
 });
-
-/* 収益化の仕組みは作ってあるが、v1では全部止めておく。
-
-   止める理由は「まだ本物が入っていない」ため。
-   affiliateId は仮の文字列、リンク先は example.com のまま。
-   この状態で公開すると「PR ◯◯周辺の宿を探す」を押した人が
-   何も無いページへ飛ばされる。信用を落とすだけで、得るものが無い。
-
-   Cookieの同意ダイアログも同じ理由で止めてある。
-   出す広告が無いのに同意を求めるのは筋が通らないし、
-   その中のプライバシーポリシーのリンクもまだ行き先が無い。
-
-   再開するときの順番:
-     1. サイトを公開する（ASPの審査でURLを聞かれる）
-     2. プライバシーポリシーと問い合わせ先を用意する
-     3. ASPに登録して、affiliateId と affiliateBase を本物にする
-     4. affiliate を true に戻す
-     5. 広告（AdSense等）を入れるなら ads と consent も true に戻す */
-const MONETIZE = {
-  ads: false,
-  affiliate: false,
-  consent: false,
-
-  affiliateId: 'YOUR_AFFILIATE_ID',
-  affiliateBase: 'https://example.com/hotels'
-};
-
-const EU_ZONES = /^(Europe\/|Atlantic\/(Azores|Madeira|Canary|Faroe|Reykjavik)|Arctic\/Longyearbyen)/;
-
-function inStrictRegion() {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    return EU_ZONES.test(tz);
-  } catch (e) {
-    return true;
-  }
-}
-
-const CONSENT_KEY = 'ryojo_consent';
-let consentState = null;
-let strictRegion = true;
-
-function loadConsent() {
-  try { return localStorage.getItem(CONSENT_KEY); } catch (e) { return null; }
-}
-function saveConsent(v) {
-  consentState = v;
-  try { localStorage.setItem(CONSENT_KEY, v); } catch (e) {  }
-}
-
-function initConsent() {
-  strictRegion = inStrictRegion();
-  consentState = loadConsent();
-
-  if (!MONETIZE.consent) { consentState = consentState || 'all'; applyMonetize(); return; }
-
-  if (strictRegion && !consentState) {
-    document.body.classList.add('need-consent');
-  }
-  applyMonetize();
-}
-
-function closeConsent(v) {
-  saveConsent(v);
-  document.body.classList.remove('need-consent');
-  applyMonetize();
-  toast(v === 'all' ? 'パーソナライズ広告を許可しました' : '非パーソナライズ広告に設定しました');
-}
-
-$('#cAll').addEventListener('click', function () { closeConsent('all'); });
-$('#cNec').addEventListener('click', function () { closeConsent('necessary'); });
-
-$('#adPref').addEventListener('click', function () {
-  document.body.classList.add('need-consent');
-});
-
-function adMode() {
-  if (!MONETIZE.ads) return 'off';
-  if (consentState === 'all') return 'personalized';
-  if (strictRegion && !consentState) return 'blocked';
-  if (strictRegion && consentState === 'necessary') return 'blocked';
-  return 'npa';
-}
-
-function applyMonetize() {
-  const mode = adMode();
-  document.body.classList.toggle('no-ads', mode === 'off');
-  document.body.classList.toggle('no-aff', !MONETIZE.affiliate);
-
-  const box = $('#adBox');
-  if (mode === 'personalized') {
-    box.innerHTML = 'ここに広告が入ります<br><span>パーソナライズ広告 / 300 × 250</span>';
-  } else if (mode === 'npa') {
-    box.innerHTML = 'ここに広告が入ります<br><span>非パーソナライズ広告 / 300 × 250</span>';
-  } else if (mode === 'blocked') {
-    box.innerHTML = 'この地域では同意が必要なため<br><span>広告を読み込んでいません</span>';
-  }
-
-  $('#adPref').textContent = (mode === 'personalized')
-    ? '広告について（パーソナライズ中）' : '広告について';
-
-}
-
-function affiliateUrl(s) {
-  return MONETIZE.affiliateBase +
-    '?q=' + encodeURIComponent(s.name || '') +
-    '&aid=' + encodeURIComponent(MONETIZE.affiliateId);
-}
-
-function makeAffLink(s, label) {
-  const a = document.createElement('a');
-  a.className = 'aff';
-  a.href = affiliateUrl(s);
-  a.target = '_blank';
-  a.rel = 'noopener sponsored';
-  a.innerHTML = '<span class="pr">PR</span>';
-  a.appendChild(document.createTextNode(label));
-  return a;
-}
 
 $('#odptBtn').addEventListener('click', runRailCheck);
 $('#odptClose').addEventListener('click', function () {
@@ -4863,7 +6105,633 @@ function toast(msg) {
 }
 
 renderGuide();
-initConsent();
+
+/* ---------------------------------------------------------------------------
+   サーバーへの保存（Supabase）
+
+   旅程はこれまで、このブラウザの中だけにあった。閉じれば消えるし、
+   別の端末では開けない。ここで、ログインした本人だけが読める形で
+   サーバーへ預けられるようにする。
+
+   守りは3枚ある。
+     ・鍵（anon）は公開前提のもの。ブラウザに書いてよい。
+     ・表には行ごとの権限（RLS）が入っていて、auth.uid() の一致する行しか触れない。
+     ・鍵だけ持っていても、ログインしていない人には誰の行も見えない。
+
+   ログインはメールに届くリンクを押す方式。パスワードを預からずに済む。
+   PKCE を使うので、戻り先は `?code=...` の形で返ってくる。
+   この頁は `#d=...` を共有リンクに使っているので、そちらとはぶつからない。
+   --------------------------------------------------------------------------- */
+
+/* config.js には素のアドレス（https://xxxx.supabase.co）を入れる。
+   Supabase の画面には `/rest/v1/` まで付いた形も出ていて間違えやすいので、
+   付いていたら落としてから使う。末尾の `/` も同じ。 */
+function supaBaseUrl() {
+  const raw = (typeof SUPABASE_URL === 'string') ? SUPABASE_URL : '';
+  return raw.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '').replace(/\/+$/, '');
+}
+
+const SUPA_URL = supaBaseUrl();
+const SUPA_KEY = (typeof SUPABASE_ANON_KEY === 'string') ? SUPABASE_ANON_KEY.trim() : '';
+
+let supa = null;
+let account = null;   // ログインしている人。していなければ null
+let tripId = null;    // いま開いている旅程の、サーバー上の id
+let postBody = '';    // 投稿の本文。書く欄は段階3で足す
+
+function supaReady() { return !!supa; }
+
+function initSupabase() {
+  if (!SUPA_URL || !SUPA_KEY) { renderAccount(); return; }
+  if (!window.supabase || !window.supabase.createClient) {
+    console.warn('supabase-js を読み込めませんでした');
+    renderAccount();
+    return;
+  }
+
+  supa = window.supabase.createClient(SUPA_URL, SUPA_KEY, {
+    auth: { flowType: 'pkce', detectSessionInUrl: true,
+            persistSession: true, autoRefreshToken: true }
+  });
+
+  supa.auth.onAuthStateChange(function (_ev, session) {
+    account = session ? session.user : null;
+    renderAccount();
+  });
+
+  supa.auth.getSession().then(function (r) {
+    account = (r.data && r.data.session) ? r.data.session.user : null;
+    renderAccount();
+    cleanAuthUrl();
+  }, function (err) {
+    console.warn('ログイン状態を読めませんでした', err);
+    renderAccount();
+  });
+}
+
+/* 戻ってきた直後のアドレスには `?code=...` が残る。
+   そのままだと共有もブックマークもしづらいので、消して整える。
+   `#d=...`（共有リンク）のほうは触らない。 */
+function cleanAuthUrl() {
+  if (!/[?&](code|error|error_description|error_code)=/.test(location.search)) return;
+  const u = new URL(location.href);
+  ['code', 'state', 'error', 'error_code', 'error_description']
+    .forEach(function (k) { u.searchParams.delete(k); });
+  history.replaceState(null, '', u.pathname + u.search + u.hash);
+}
+
+function renderAccount() {
+  const box = $('#account');
+  if (!box) return;
+
+  const on = !!account;
+  box.classList.toggle('signed', on);
+  box.querySelector('.who .lbl').textContent =
+    on ? (account.email || 'ログイン中')
+       : (supaReady() ? '未ログイン' : '保存先が未設定');
+
+  $('#loginBtn').disabled = !supaReady();
+}
+
+/* 覆いかぶせる窓はひとつを使い回す。中身は用ごとに作り直す。 */
+function openSheet(title) {
+  $('#supaTitle').textContent = title;
+  const out = $('#supaOut');
+  out.innerHTML = '';
+  document.body.classList.add('supa-open');
+  return out;
+}
+
+function closeSheet() { document.body.classList.remove('supa-open'); }
+
+$('#supaClose').addEventListener('click', closeSheet);
+
+// 確認の1行。鉄道データの確認画面と同じ見た目にする。
+function sheetLine(out, state, text, extra) {
+  const row = document.createElement('div');
+  row.className = 'step ' + state;
+  const m = document.createElement('span');
+  m.className = 'mark';
+  m.textContent = state === 'ok' ? '✓' : (state === 'ng' ? '×' : '…');
+  const t = document.createElement('span');
+  t.innerHTML = text + (extra ? ' <code>' + extra + '</code>' : '');
+  row.appendChild(m); row.appendChild(t);
+  out.appendChild(row);
+  return row;
+}
+
+function sheetNote(out, html) {
+  const n = document.createElement('div');
+  n.className = 'note';
+  n.innerHTML = html;
+  out.appendChild(n);
+  return n;
+}
+
+/* ---------------------------------------------------------------------------
+   接続を確認
+
+   繋がらないときに、どこで止まっているのかを切り分けられるようにする。
+   鍵・サーバー・表・ログインの4つを、上から順に確かめる。
+   --------------------------------------------------------------------------- */
+async function runSupaCheck() {
+  const out = openSheet('接続を確認');
+
+  // 1. 鍵
+  if (!SUPA_URL || !SUPA_KEY) {
+    sheetLine(out, 'ng', '鍵が未設定です', 'config.js');
+    sheetNote(out, '<code>config.js</code> の <code>SUPABASE_URL</code> と ' +
+      '<code>SUPABASE_ANON_KEY</code> に、Supabase の Project Settings → API の値を' +
+      '入れてください。空の引用符の中に入っているか確かめます。');
+    return;
+  }
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(SUPA_URL)) {
+    sheetLine(out, 'ng', 'アドレスの形が違います', SUPA_URL);
+    sheetNote(out, '<code>https://xxxxxxxx.supabase.co</code> の形で入れてください。' +
+      '末尾の <code>/</code> や <code>/rest/v1/</code> は要りません。');
+    return;
+  }
+  sheetLine(out, 'ok', '鍵が設定されています', SUPA_URL);
+
+  /* 2. サーバー
+
+     ここで叩くのは認証まわりの health。表も鍵も要らない、素の生存確認になる。
+     （REST の入口 `/rest/v1/` は service_role 専用で、
+      anon の鍵では必ず401が返る。繋がっているかの確認には使えない） */
+  let res;
+  try {
+    res = await fetch(SUPA_URL + '/auth/v1/health', { headers: { apikey: SUPA_KEY } });
+  } catch (err) {
+    sheetLine(out, 'ng', 'サーバーに繋がりません', String(err.message || err));
+    sheetNote(out, 'アドレスの打ち間違いか、ネットワークが繋がっていない可能性があります。');
+    return;
+  }
+  if (!res.ok) {
+    sheetLine(out, 'ng', 'サーバーが応答しませんでした', 'HTTP ' + res.status);
+    sheetNote(out, '無料枠のプロジェクトは1週間使われないと停止します。' +
+      'Supabase のダッシュボードを開いて、止まっていないか確かめてください。');
+    return;
+  }
+  sheetLine(out, 'ok', 'サーバーに繋がりました');
+
+  /* 3. 表
+
+     鍵が受け付けられるかも、ここで一緒に分かる。
+     実際に表を読みにいくので、鍵・表・権限のどれで止まっているかが返ってくる。
+
+     head:true（中身を取らずに数だけ聞く形）は使わない。
+     表が無くても 204 が返ってきてしまい、「ある」と report してしまう。
+     一度これで嘘の合格を出したので、必ず中身を取りにいく。 */
+  const probe = await supa.from(POSTS).select('id').limit(1);
+  if (probe.error) {
+    const code = probe.error.code || '';
+    const msg = probe.error.message || '';
+    if (probe.status === 401 || /api key/i.test(msg)) {
+      sheetLine(out, 'ng', '鍵が受け付けられませんでした', msg);
+      sheetNote(out, 'Project Settings → API の <code>anon public</code> の鍵を' +
+        'コピーし直してください（<code>service_role</code> のほうではありません）。');
+    } else if (code === '42P01' || code === 'PGRST205') {
+      sheetLine(out, 'ng', '表 posts が見つかりません', code);
+      sheetNote(out, '「Supabase 写真と投稿」のSQLが実行されていません。' +
+        'SQL Editor で流し直してください。');
+    } else if (code === '42501') {
+      sheetLine(out, 'ng', '表 posts に触れません（権限がありません）', code);
+      sheetNote(out, 'SQL Editor で次を実行してください。<br>' +
+        '<code>grant select, insert, update, delete on table posts to anon, authenticated;</code>');
+    } else {
+      sheetLine(out, 'ng', '表を確かめられませんでした', code || probe.error.message);
+    }
+    return;
+  }
+  sheetLine(out, 'ok', '表 posts があります');
+
+  /* 写真の置き場所。無いと、保存のときに写真だけ預けられない。
+
+     list() では確かめられない（棚が無くても、空の一覧が返ってくる）。
+     無いものを1つ取りにいくと、棚が無いときだけ NoSuchBucket が返るので、
+     その違いを見る。 */
+  let store;
+  try {
+    const probeUrl = SUPA_URL + '/storage/v1/object/public/' + PHOTO_BUCKET + '/__probe__';
+    store = await (await fetch(probeUrl)).text();
+  } catch (err) {
+    store = '';
+  }
+  if (/NoSuchBucket|Bucket not found/.test(store)) {
+    sheetLine(out, 'ng', '写真の置き場所がありません', PHOTO_BUCKET);
+    sheetNote(out, '「Supabase 写真と投稿」のSQLの3番が実行されていません。');
+    return;
+  }
+  sheetLine(out, 'ok', '写真の置き場所があります', PHOTO_BUCKET);
+
+  /* 4. ログイン
+
+     手元の覚えではなく、サーバーに聞く。
+     ログインの証しには期限があり、切れていても手元にはしばらく残る。
+     「ログインしているはずなのに保存できない」の正体はたいていこれなので、
+     ここで見分けられないと点検の意味がない。 */
+  const who = await supa.auth.getUser();
+  const user = (who.data && who.data.user) ? who.data.user : null;
+
+  if (user) {
+    sheetLine(out, 'ok', 'ログインしています', user.email || '');
+    sheetNote(out, '「サーバーに保存」で、いまの旅程を預けられます。' +
+      '預けた旅程は、別の端末で同じアドレスでログインすれば開けます。');
+  } else if (account) {
+    sheetLine(out, 'ng', 'ログインが切れています');
+    sheetNote(out, 'いちど「ログアウト」を押してから、もういちどログインしてください。');
+  } else {
+    sheetLine(out, 'wait', 'まだログインしていません');
+    sheetNote(out, 'サイドバーの「ログイン」からメールアドレスを入れてください。' +
+      '保存と呼び出しは、ログインしてからできるようになります。');
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   ログイン
+
+   メールに届くリンクを押すだけ。パスワードは扱わない。
+
+   戻り先（このページのアドレス）は Supabase 側の
+   Authentication → URL Configuration に登録されている必要がある。
+   合っていないと、リンクを押しても戻ってこない。
+   自分で確かめようがないと詰まるので、その値をこの画面に出しておく。
+   --------------------------------------------------------------------------- */
+function loginRedirect() {
+  return location.href.split('#')[0].split('?')[0];
+}
+
+function openLogin() {
+  if (!supaReady()) { toast('先に config.js へ鍵を入れてください'); return; }
+
+  const out = openSheet('ログイン');
+  const back = loginRedirect();
+
+  const lead = document.createElement('div');
+  lead.textContent = 'メールアドレスを入れると、ログイン用のリンクが届きます。パスワードは要りません。';
+  out.appendChild(lead);
+
+  const mail = document.createElement('input');
+  mail.className = 'field';
+  mail.type = 'email';
+  mail.placeholder = 'you@example.com';
+  mail.autocomplete = 'email';
+  out.appendChild(mail);
+
+  const acts = document.createElement('div');
+  acts.style.cssText = 'display:flex;gap:10px;align-items:center;margin-top:8px;';
+  const send = document.createElement('button');
+  send.className = 'go';
+  send.textContent = 'リンクを送る';
+  const state = document.createElement('span');
+  state.style.cssText = 'font-size:11.5px;color:var(--muted);';
+  acts.appendChild(send);
+  acts.appendChild(state);
+  out.appendChild(acts);
+
+  sheetNote(out,
+    'メールのリンクは<b>このブラウザで開いてください。</b>別の端末で開くと戻れません。<br>' +
+    '戻り先は <code>' + back + '</code> です。このアドレスを Supabase の ' +
+    'Authentication → URL Configuration の <b>Site URL</b> と ' +
+    '<b>Redirect URLs</b> に入れておいてください。');
+
+  const go = async function () {
+    const addr = mail.value.trim();
+    if (!addr) { state.textContent = 'メールアドレスを入れてください'; return; }
+
+    send.disabled = true;
+    state.textContent = '送っています…';
+
+    const r = await supa.auth.signInWithOtp({
+      email: addr, options: { emailRedirectTo: back }
+    });
+
+    send.disabled = false;
+    if (r.error) {
+      state.textContent = '送れませんでした：' + r.error.message;
+      const link = document.createElement('button');
+      link.className = 'go';
+      link.textContent = '接続を確認';
+      link.addEventListener('click', runSupaCheck);
+      acts.appendChild(link);
+      return;
+    }
+    state.textContent = '';
+    lead.textContent = addr + ' にリンクを送りました。' +
+      '届いたメールのリンクを押すと、ここへ戻ってきます。';
+    mail.style.display = 'none';
+    send.style.display = 'none';
+  };
+
+  send.addEventListener('click', go);
+  mail.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  setTimeout(function () { mail.focus(); }, 60);
+}
+
+async function logout() {
+  if (!supaReady()) return;
+  await supa.auth.signOut();
+  tripId = null;
+  toast('ログアウトしました');
+}
+
+/* ---------------------------------------------------------------------------
+   写真の置き場所
+
+   写真は、撮った直後は Data URL（写真そのものを文字にしたもの）として
+   spot.photo に入っている。手元で使うぶんにはこれでよい。
+
+   ただしサーバーへ預けるときは、そのまま送らない。写真1枚で数百KB〜数MBあり、
+   旅程の本体（座標と文章）より二桁大きい。データベースに入れると
+   無料枠500MBがすぐ埋まり、一覧を開くだけで全部の写真が流れてくる。
+
+   なので保存の直前に、写真だけをファイル置き場（Storage）へ移し、
+   spot.photo には置き場所（'利用者のID/でたらめな名前.jpg'）を残す。
+
+     手元      photo: "data:image/jpeg;base64,/9j/4AAQ..."
+     預けた後  photo: "a1b2c3d4/5e6f7a8b.jpg"
+
+   読むときは photoSrc() が、どちらの形でも表示できるURLに直す。
+   ファイルから読み込んだ古い旅程も、次に保存したときに自動で移る。
+   --------------------------------------------------------------------------- */
+
+const PHOTO_BUCKET = 'photos';
+
+function isStoredPhoto(v) {
+  return typeof v === 'string' && v && !/^(data:|https?:|blob:)/.test(v);
+}
+
+/* 表示に使えるURLへ直す。
+   Data URL とふつうのURLはそのまま、置き場所のときだけ組み立てる。 */
+function photoSrc(v) {
+  if (!isStoredPhoto(v)) return v;
+  if (!supaReady()) return v;
+  const r = supa.storage.from(PHOTO_BUCKET).getPublicUrl(v);
+  return (r && r.data && r.data.publicUrl) ? r.data.publicUrl : v;
+}
+
+// "data:image/jpeg;base64,..." を、送れる形に戻す
+function dataUrlToBlob(url) {
+  const comma = url.indexOf(',');
+  const head = url.slice(5, comma);
+  const type = head.split(';')[0] || 'image/jpeg';
+  const bin = atob(url.slice(comma + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: type });
+}
+
+function photoExt(type) {
+  if (/png/.test(type)) return 'png';
+  if (/webp/.test(type)) return 'webp';
+  if (/gif/.test(type)) return 'gif';
+  return 'jpg';
+}
+
+function randomName() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/* まだ手元にしか無い写真を置き場所へ移す。
+   移せたものだけ spot.photo を置き場所に書き換える。
+   1枚でも失敗したら、そこで止めて呼び出し元へ伝える。 */
+async function uploadPhotos(list, onProgress) {
+  const need = list.filter(function (s) {
+    return typeof s.photo === 'string' && s.photo.indexOf('data:') === 0;
+  });
+  if (!need.length) return { moved: 0 };
+
+  for (let i = 0; i < need.length; i++) {
+    const s = need[i];
+    if (onProgress) onProgress(i, need.length);
+
+    let blob;
+    try {
+      blob = dataUrlToBlob(s.photo);
+    } catch (err) {
+      return { error: '写真を読めませんでした（' + (s.name || '') + '）' };
+    }
+
+    const path = account.id + '/' + randomName() + '.' + photoExt(blob.type);
+    const up = await supa.storage.from(PHOTO_BUCKET)
+      .upload(path, blob, { contentType: blob.type, upsert: false });
+
+    if (up.error) {
+      console.warn('写真を預けられませんでした', up.error);
+      return { error: up.error.message };
+    }
+    s.photo = path;
+  }
+
+  if (onProgress) onProgress(need.length, need.length);
+  return { moved: need.length };
+}
+
+// 一覧に出す代表の写真。最初に写真のある場所のもの。
+function coverOf(list) {
+  for (let i = 0; i < list.length; i++) {
+    if (isStoredPhoto(list[i].photo)) return list[i].photo;
+  }
+  return null;
+}
+
+/* ---------------------------------------------------------------------------
+   保存と呼び出し
+
+   預ける先は posts。題名・本文・公開範囲を持つ表で、
+   あとで「みんなの旅」に出すときも同じ行をそのまま使う。
+
+   旅程の中身（journey）は「ファイルに保存」とまったく同じ形にしてある。
+   ファイルで持ち出したものをサーバーへ入れても、その逆でも読める。
+   違うのは写真だけで、預けるときは置き場所へ移してからにする。
+
+   消すときは行を消さず deleted_at に日付を入れる（設計書のとおり）。
+   誤って消したものを戻せるようにするため。
+   --------------------------------------------------------------------------- */
+
+const POSTS = 'posts';
+
+// 写真を外に出したので、ここへ来るのは座標と文章だけ。1MBもあれば足りる。
+const CLOUD_MAX = 1024 * 1024;
+
+async function cloudSave() {
+  if (!account) { toast('先にログインしてください'); return; }
+  if (!spots.length) { toast('先に場所を追加してください'); return; }
+
+  const btn = $('#cloudSaveBtn');
+  btn.disabled = true;
+
+  // 1. まだ手元にしか無い写真を、置き場所へ移す
+  btn.textContent = '写真を預けています…';
+  const up = await uploadPhotos(spots, function (n, t) {
+    btn.textContent = '写真を預けています… ' + n + '/' + t;
+  });
+
+  if (up.error) {
+    btn.disabled = false;
+    btn.textContent = 'サーバーに保存';
+    toast('写真を預けられませんでした：' + up.error);
+    await runSupaCheck();
+    return;
+  }
+  if (up.moved) renderAll();   // 置き場所のURLで出し直す
+
+  // 2. 旅程を預ける
+  btn.textContent = '保存しています…';
+
+  const journey = { name: tripName, spots: spots };
+  const size = new TextEncoder().encode(JSON.stringify(journey)).length;
+  if (size > CLOUD_MAX) {
+    btn.disabled = false;
+    btn.textContent = 'サーバーに保存';
+    toast('旅程が大きすぎて保存できません（' + Math.round(size / 1024) + 'KB）');
+    return;
+  }
+
+  const row = {
+    author_id: account.id,
+    title: tripName || defaultTripName(),
+    body: postBody,
+    journey: journey,
+    cover_url: coverOf(spots),
+    visibility: 'private',
+    updated_at: new Date().toISOString()
+  };
+
+  let err = null;
+  if (tripId) {
+    const r = await supa.from(POSTS).update(row).eq('id', tripId).select('id');
+    err = r.error;
+    // 消された後などで1行も更新できなかったら、新しく作り直す
+    if (!err && (!r.data || !r.data.length)) tripId = null;
+  }
+  if (!tripId && !err) {
+    const r = await supa.from(POSTS).insert(row).select('id').single();
+    err = r.error;
+    if (!err) tripId = r.data.id;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'サーバーに保存';
+
+  if (err) {
+    console.warn('保存できませんでした', err);
+    toast('保存できませんでした：' + (err.message || ''));
+    await runSupaCheck();
+    return;
+  }
+  toast(up.moved ? ('サーバーに保存しました（写真 ' + up.moved + ' 枚を移しました）')
+                 : 'サーバーに保存しました');
+}
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const p = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) +
+         ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+async function openCloudList() {
+  if (!account) { toast('先にログインしてください'); return; }
+
+  const out = openSheet('サーバーから開く');
+  out.textContent = '読み込んでいます…';
+
+  const r = await supa.from(POSTS)
+    .select('id, title, updated_at, cover_url')
+    .is('deleted_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (r.error) {
+    console.warn('一覧を読めませんでした', r.error);
+    toast('一覧を読めませんでした');
+    await runSupaCheck();
+    return;
+  }
+  out.innerHTML = '';
+
+  if (!r.data.length) {
+    const n = document.createElement('div');
+    n.className = 'none';
+    n.textContent = 'まだ何も保存されていません。「サーバーに保存」で預けられます。';
+    out.appendChild(n);
+    return;
+  }
+
+  r.data.forEach(function (t) {
+    const row = document.createElement('div');
+    row.className = 'tripRow';
+    row.innerHTML = '<span class="th"></span><span class="nm"></span><span class="at"></span>' +
+      '<button data-act="open">開く</button>' +
+      '<button class="del" data-act="del">消す</button>';
+
+    const th = row.querySelector('.th');
+    if (t.cover_url) {
+      const im = document.createElement('img');
+      im.src = photoSrc(t.cover_url);
+      im.alt = '';
+      th.appendChild(im);
+    }
+
+    row.querySelector('.nm').textContent = t.title || '(名前のない旅)';
+    row.querySelector('.at').textContent = fmtWhen(t.updated_at);
+
+    row.querySelector('[data-act=open]').addEventListener('click', function () {
+      cloudOpen(t.id);
+    });
+
+    /* 消すときは行そのものを消さず、消した印だけを付ける。
+       誤って消したときに戻せるようにするため。 */
+    row.querySelector('[data-act=del]').addEventListener('click', async function () {
+      if (!confirm('「' + (t.title || '名前のない旅') + '」を消しますか。')) return;
+      const d = await supa.from(POSTS)
+        .update({ deleted_at: new Date().toISOString() }).eq('id', t.id);
+      if (d.error) { toast('消せませんでした：' + d.error.message); return; }
+      if (tripId === t.id) tripId = null;
+      row.remove();
+      toast('消しました');
+    });
+
+    out.appendChild(row);
+  });
+}
+
+async function cloudOpen(id) {
+  const r = await supa.from(POSTS).select('title, body, journey').eq('id', id).single();
+  if (r.error) {
+    toast('開けませんでした：' + r.error.message);
+    await runSupaCheck();
+    return;
+  }
+
+  const obj = r.data.journey || {};
+  stopIntro();
+  if (playing) stopPlay();
+
+  tripName = obj.name || r.data.title || '';
+  postBody = r.data.body || '';
+  spots = spotsFrom(obj.spots);
+  selectedId = null;
+  tripId = id;
+  $('#tripName').value = tripName;
+
+  closeSheet();
+  if (document.body.classList.contains('mode-story')) await setMode('edit');
+  await rebuild();
+  fitAll();
+  toast('サーバーから開きました');
+}
+
+$('#acctCheck').addEventListener('click', runSupaCheck);
+$('#loginBtn').addEventListener('click', openLogin);
+$('#logoutBtn').addEventListener('click', logout);
+$('#cloudSaveBtn').addEventListener('click', cloudSave);
+$('#cloudOpenBtn').addEventListener('click', openCloudList);
+
+initSupabase();
 </script>
 
 </body>
