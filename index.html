@@ -1615,58 +1615,63 @@ const NASA_ATTR = '<a href="https://www.earthdata.nasa.gov/data/tools/gibs" ' +
                   'target="_blank" rel="noopener">NASA EOSDIS GIBS</a>';
 
 /* ---------------------------------------------------------------------------
-   航空写真の「撮影範囲の外」を海で埋める
+   航空写真の「撮影範囲の外」を抜いて、下の衛星画像を見せる
 
    地理院の航空写真は日本の領域しか持っていない。低い倍率のタイルでは、
-   その外側が rgb(52,52,52) の平らな灰色で塗られて返ってくる。
-   日本を丸ごと映すと、本州の東に大きな灰色の楔として見える。
+   その外側が平らな灰色で塗られて返ってくる。日本を丸ごと映すと、
+   本州の東に大きな灰色の楔として見える。
 
-   幸い、この灰色はぴたり1色だった（実測：楔の面積の8〜30%を占め、
-   他の色は最大でも0.7%。本物の海は青が強く 7〜16,10〜31,20〜46 の範囲で、
-   灰色と数値が重ならない）。だから色で見分けて置き換えられる。
+   幸い、この灰色は各倍率でぴたり1色に決まっている。本物の海は青が強く
+   三色が30ほど開くので、灰色とは数値が重ならない。だから見分けられる。
 
-   置き換える色は決め打ちにせず、そのタイル自身の海の平均色を使う。
-   タイルごとに海の濃さが違うので、決め打ちだと継ぎ目が出る。
-
-   タイルを作り直すのは低い倍率のときだけ。高い倍率では灰色は出ないので
-   （範囲外はタイルそのものが返ってこない）、何もせずそのまま渡す。
+   手を入れるのは低い倍率のときだけ。高い倍率では範囲外はタイルごと
+   返ってこないので、灰色そのものが出ない。
    --------------------------------------------------------------------------- */
 
 const SEA_FILL_MAX_Z = 8;      // ここまでの倍率だけ手を入れる
-const VOID_RGB = 52;           // 撮影範囲外を示す灰色
-const VOID_TOL = 4;            // 圧縮でわずかに揺れるぶんの許容
 
-const SEA_FALLBACK = [10, 17, 40];
+/* 撮影範囲外を示す灰色は、倍率によって値が違う。実測。
 
-function isVoid(r, g, b) {
-  return Math.abs(r - VOID_RGB) <= VOID_TOL &&
-         Math.abs(g - VOID_RGB) <= VOID_TOL &&
-         Math.abs(b - VOID_RGB) <= VOID_TOL;
-}
+     z2       ぴたり 72（タイルの 7.2%）
+     z3〜z6   ぴたり 52（同 1.3〜24.9%）
+     z0・z1   そもそもタイルが返らない（404）
+     z7以降   範囲外はタイルごと返らないので、灰色は出ない
 
-// 青が優勢な画素＝海。その平均をこのタイルの海の色とする。
-function seaAverage(d) {
-  let r = 0, g = 0, b = 0, n = 0;
-  for (let p = 0; p < d.length; p += 4) {
-    const rr = d[p], gg = d[p + 1], bb = d[p + 2];
-    if (bb > rr + 6 && bb > gg + 3 && bb > 16 && bb < 120) { r += rr; g += gg; b += bb; n++; }
+   52 の決め打ちにしていたので、z2 を取りこぼしていた。
+   いちばん引きの絵で灰色の三角が残っていたのはこれが理由。 */
+const VOID_GREYS = [52, 72];
+const VOID_TOL = 4;      // 圧縮でわずかに揺れるぶんの許容
+const VOID_SOFT = 12;    // ここまでは縁とみなして薄く抜く
+const VOID_SPREAD = 4;   // 三色の開き。海は青が強く30ほど開くので、ここで分かれる
+
+// 撮影範囲外らしさを 0〜1 で返す。1なら完全に抜き、途中なら薄く抜く。
+function voidness(r, g, b) {
+  if (Math.max(r, g, b) - Math.min(r, g, b) > VOID_SPREAD) return 0;
+
+  const m = (r + g + b) / 3;
+  let near = 999;
+  for (let i = 0; i < VOID_GREYS.length; i++) {
+    const d = Math.abs(m - VOID_GREYS[i]);
+    if (d < near) near = d;
   }
-  if (n < 400) return SEA_FALLBACK;
-  return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+  if (near <= VOID_TOL) return 1;
+  if (near >= VOID_SOFT) return 0;
+  return (VOID_SOFT - near) / (VOID_SOFT - VOID_TOL);
 }
 
-/* 撮影範囲の外を、そのタイル自身の海の平均色で塗る。
+/* 撮影範囲の外を、塗らずに抜く。下に敷いた NASA の衛星画像が、そこから見える。
 
-   同じ画像から色を取るので、境目が出ない。のっぺりした一色にはなるが、
-   ここに出るのは日本から遠く離れた外洋で、拡大して眺める場所ではない。
+   以前はそのタイル自身の海の平均色で塗っていた。日本の周りだけを見ている
+   ぶんには継ぎ目が出ず具合がよかったが、いちばん引いた絵ではオーストラリアや
+   アジアの上に、日本の海の色をした平らな板を載せることになる。
+   下に本物の衛星画像があるのだから、どかせばよい。
 
-   NASA の衛星画像をこの穴に嵌め込んで色を合わせる作りも試した。理屈の上では
-   より正しく、タイルごとに色も揃ったが、並べて見比べても違いが分からなかった。
-   タイル1枚につき通信が2回になり、色を合わせる計算も要る。
-   見て分からないもののために払う代価としては高いので、この形に戻した。
+   色を合わせる仕掛けは付けない。以前ひととおり作ったが、並べて見比べても
+   違いが分からず、通信も計算も倍になるので割に合わなかった。
+   ここでやるのは灰色を抜くことだけ。
 
-   低い倍率のときだけ手を入れる。高い倍率では灰色は出ない
-   （範囲外はタイルそのものが返ってこない）ので、そのまま渡す。 */
+   縁は薄く抜く。灰色と写真の境目には圧縮でできた中間色が細く並ぶので、
+   そこを残すと衛星画像の上に灰色の輪郭が出る。 */
 async function fillVoid(buf) {
   const bmp = await createImageBitmap(new Blob([buf]));
   const c = new OffscreenCanvas(bmp.width, bmp.height);
@@ -1676,22 +1681,23 @@ async function fillVoid(buf) {
 
   const img = g.getImageData(0, 0, c.width, c.height);
   const d = img.data;
+  const pixels = d.length / 4;
 
-  let voids = 0;
+  let clear = 0;
   for (let p = 0; p < d.length; p += 4) {
-    if (isVoid(d[p], d[p + 1], d[p + 2])) voids++;
+    const v = voidness(d[p], d[p + 1], d[p + 2]);
+    if (v <= 0) continue;
+    d[p + 3] = Math.round(255 * (1 - v));
+    if (v === 1) clear++;
   }
-  if (!voids) return buf;                       // 灰色が無ければ触らない
 
-  const sea = seaAverage(d);
-  for (let p = 0; p < d.length; p += 4) {
-    if (isVoid(d[p], d[p + 1], d[p + 2])) {
-      d[p] = sea[0]; d[p + 1] = sea[1]; d[p + 2] = sea[2];
-    }
-  }
+  /* 灰色がまとまって在るときだけ作り直す。
+     透明を残すには PNG にするしかなく、同じタイルでも大きさが倍近くなる。
+     縁が数画素かすっただけのタイルまで PNG にすると割に合わない。 */
+  if (clear < pixels * 0.002) return buf;
+
   g.putImageData(img, 0, 0);
-
-  const out = await c.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
+  const out = await c.convertToBlob({ type: 'image/png' });
   return await out.arrayBuffer();
 }
 
