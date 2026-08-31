@@ -1135,6 +1135,18 @@ body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden; }
   #introCard .wy { font-size: 9px; margin-top: 3px; padding-top: 3px; }
+
+  /* 出典はパネルから畳む。
+
+     同じ出典が地図の帯（右下の ⓘ）にも出ていて、狭い画面では二度出す
+     意味がない。実測ではパネル397pxのうち124pxを出典が占めていて、
+     しかも下の行は見切れていた。場所を取ったうえで読めていなかった。
+
+     残すのは規約への導線と点検口だけ。どちらも地図の帯には無い。
+     出典そのものは ⓘ に全部そろえてある。 */
+  #credits > div:not(.legal):not(.checks) { display: none; }
+  #credits { padding: 8px 12px 10px; }
+  #credits .legal { margin-top: 0; padding-top: 0; border-top: 0; }
 }
 
 </style>
@@ -1788,10 +1800,24 @@ const map = new maplibregl.Map({
      先方が謝意を求めているので出す。 */
 map.addControl(new maplibregl.AttributionControl({
   compact: true,
+  /* 狭い画面ではパネル側の出典を畳むので、ここに全部そろえておく。
+     この帯は ⓘ を押すと開く形なので、行が増えても場所は取らない。 */
   customAttribution: '鉄道: <b>国土数値情報（鉄道データ）国土交通省</b>' +
                      ' ・ 航路: <b>© OpenStreetMap contributors</b>' +
-                     ' ・ 空港: <b>OurAirports</b>'
+                     ' ・ 空港: <b>OurAirports</b>' +
+                     ' ・ 地名検索: <b>地理院地名検索（国土地理院）</b>' +
+                     ' ・ 道路の経路: <b>Mapbox</b>'
 }));
+/* 狭い画面では、帯を畳んだ状態から始める。
+
+   MapLibre は compact を指定しても、最初は開いた状態で出す。
+   実測では 410×84px あり、スマホの地図（430×409）の2割を覆っていた。
+   ⓘ を押せば開くし、利用規約のページにも同じ出典を全部載せてある。 */
+if (window.innerWidth < 900) {
+  const attrib = document.querySelector('.maplibregl-ctrl-attrib');
+  if (attrib) attrib.classList.remove('maplibregl-compact-show');
+}
+
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
 
@@ -3717,7 +3743,18 @@ function introPadding() {
   const cardW = introCardWidth(winW);
 
   if (winW < 900) {
-    return { top: Math.round(h * 0.34), bottom: 20, left: 20, right: 20 };
+    /* 狭い画面ではカードが地図の下に出る。空けるのは下。
+
+       ここは上に 34% を空けていた。上を空けると地点は下がるので、
+       カードのほうへ寄っていく。実機（iPhone・Safari）では
+       地点のピンがカードの上端に重なっていた。逆だった。
+
+       空ける量はカードの実寸から決める。中身の長さで高さが変わるので、
+       決め打ちにすると長い文章のときに足りない。 */
+    const card = document.getElementById('introCard');
+    const ch = card ? card.getBoundingClientRect().height : 0;
+    const room = Math.min(Math.max(ch + 28, h * 0.30), h * 0.5);
+    return { top: 20, bottom: Math.round(room), left: 20, right: 20 };
   }
   // 紹介カードと行程表は右で横に並ぶので、両方ぶんを空ける
   const cardSpace = cardW + winW * 0.04 + 40 + ttSpace();
