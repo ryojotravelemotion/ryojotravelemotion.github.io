@@ -6519,11 +6519,15 @@ function openLogin() {
     send.disabled = false;
     if (r.error) {
       state.textContent = '送れませんでした：' + r.error.message;
-      const link = document.createElement('button');
-      link.className = 'go';
-      link.textContent = '接続を確認';
-      link.addEventListener('click', runSupaCheck);
-      acts.appendChild(link);
+      /* 失敗するたびに足していたので、押し直すぶんだけボタンが増えていた。
+         実機では3つ並んだ。すでに在るなら足さない。 */
+      if (!acts.querySelector('.recheck')) {
+        const link = document.createElement('button');
+        link.className = 'go recheck';
+        link.textContent = '接続を確認';
+        link.addEventListener('click', runSupaCheck);
+        acts.appendChild(link);
+      }
       return;
     }
     state.textContent = '';
