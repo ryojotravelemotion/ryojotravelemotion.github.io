@@ -1773,7 +1773,25 @@ function styleFor(key) {
 
   sources.base = { type: 'raster', tiles: [s.url], tileSize: 256,
                    maxzoom: s.max, attribution: GSI_ATTR };
-  layers.push({ id: 'base', type: 'raster', source: 'base' });
+
+  /* 引いた絵では、航空写真を薄くして衛星画像に譲る。
+
+     灰色を抜いたあとも、いちばん引いた絵で境目が目立っていた。今度は
+     範囲外ではなく、地理院自身の海と NASA の海の境目。低い倍率の航空写真は
+     元の解像度から大きく縮めたもので、暗くブロック状になる。隣に置いた
+     NASA のなめらかな海との差が、まっすぐな線として出ていた。
+
+     そもそも世界を映すほど引いた絵で、日本だけ航空写真である必要がない。
+     縮尺が上がるにつれて実物の写真へ入れ替わる、という見せ方にする。
+
+     切り替えは日本が画面に収まるあたり（z4.6〜z5.8）で行う。
+     はじめ z3.2〜z5 で試したが、z4.4 のあたりで航空写真が半分だけ乗り、
+     濁って見えたうえ境目も残った。引きの絵は衛星画像に任せきり、
+     日本に寄ってから航空写真へ移るほうが、どちらの絵もきれいに出る。 */
+  const basePaint = s.sea
+    ? { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 4.6, 0, 5.8, 1] }
+    : {};
+  layers.push({ id: 'base', type: 'raster', source: 'base', paint: basePaint });
 
   return { version: 8, sources: sources, layers: layers };
 }
