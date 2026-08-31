@@ -1136,6 +1136,23 @@ body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
     overflow: hidden; }
   #introCard .wy { font-size: 9px; margin-top: 3px; padding-top: 3px; }
 
+  /* 章のカードを、画面の大きさに合わせて詰める。
+
+     ここには狭い画面向けの指定が一つも無く、パソコン向けの寸法のまま
+     出していた。実測で426px、画面730pxの58%を占め、写真が入ると7割に届く。
+     地図が主役の画面なのに、地図がほとんど見えなくなっていた。
+
+     文章は切らない。利用者が自分で書いたものなので、隠すべきではない。
+     詰めるのは余白と、見出しと、写真の高さ。 */
+  .chap .box { padding: 16px 18px; border-left-width: 2px; }
+  .chap .num { font-size: 9px; letter-spacing: 2px; }
+  .chap h2 { font-size: 20px; margin: 5px 0 3px; }
+  .chap .dt, .chap .way { font-size: 10px; }
+  .chap .way { margin-top: 5px; }
+  .chap p { font-size: 12.5px; line-height: 1.9; margin-top: 9px; }
+  .chap img, .noimg { height: 128px; margin-top: 10px; }
+  .noimg { font-size: 10px; }
+
   /* 出典はパネルから畳む。
 
      同じ出典が地図の帯（右下の ⓘ）にも出ていて、狭い画面では二度出す
@@ -3735,6 +3752,31 @@ function introCardWidth(winW) {
   return Math.max(220, Math.min(360, winW * 0.22));
 }
 
+/* 章のカードのぶん、地図の下を空ける。
+
+   狭い画面のストーリー再生では、地図が全画面になり、章のカードがその上に
+   重なる。カメラは地点を画面の中央に置くので、そのままだとカードの下に
+   隠れる。実測で11px隠れていた。
+
+   空ける量はカードの実寸から出す。章ごとに文章の長さが違うので、
+   決め打ちでは合わない。広い画面ではカードが横に出るので、何もしない。 */
+function storyPadding() {
+  if (window.innerWidth >= 900) return { top: 0, bottom: 0, left: 0, right: 0 };
+
+  const box = document.querySelector('.chap.active .box');
+  const map1 = map.getContainer().getBoundingClientRect();
+  const h = map1.height || 600;
+  if (!box) return { top: 16, bottom: Math.round(h * 0.3), left: 16, right: 16 };
+
+  // カードの上端から地図の下端までを、まるごと空ける
+  const room = Math.min(map1.bottom - box.getBoundingClientRect().top + 12, h * 0.58);
+  return { top: 16, bottom: Math.round(Math.max(room, h * 0.25)), left: 16, right: 16 };
+}
+
+function applyStoryPadding() {
+  if (document.body.classList.contains('mode-story')) map.setPadding(storyPadding());
+}
+
 function introPadding() {
   const box = map.getContainer();
   const w = box.clientWidth || 1000;
@@ -5293,6 +5335,7 @@ async function setMode(m) {
   if (playing) stopPlay();
   stopStepping();
   hideArrivePin();   // 手で送っていた場合も、切り替えたら印は残さない
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
 
   document.body.classList.remove('mode-edit', 'mode-story', 'arming', 'arming-via', 'playing');
   document.body.classList.add('mode-' + m);
@@ -5608,6 +5651,7 @@ async function gotoChapter(i) {
   cam.duration = 2600;
   cam.essential = true;
   hideArrivePin();
+  applyStoryPadding();   // カードの高さは章ごとに違うので、動く前に取り直す
   map.flyTo(cam);
   drawRoute(routeUpTo(i));
 
@@ -5847,6 +5891,7 @@ async function play() {
 
     activateChapter(i);
     drawRoute(routeUpTo(i));
+    applyStoryPadding();
     showArrivePin(spots[i].coord);
     if (!playing) break;
 
@@ -6199,11 +6244,39 @@ function initSupabase() {
   supa.auth.getSession().then(function (r) {
     account = (r.data && r.data.session) ? r.data.session.user : null;
     renderAccount();
+    reportLoginReturn(!!account);   // 片づける前に読む。順番を変えないこと
     cleanAuthUrl();
   }, function (err) {
     console.warn('ログイン状態を読めませんでした', err);
     renderAccount();
   });
+}
+
+/* 戻ってきた直後に、何が起きたかを伝える。
+
+   ここは黙って失敗する場所だった。メールのリンクを押して戻ってきても、
+   引き換えに失敗すると「未ログイン」と出るだけで、理由がどこにも残らない。
+   しかも下の cleanAuthUrl がアドレスを片づけるので、後から調べる手がかりも
+   消えてしまう。だから片づける前に読む。
+
+   出しわけているのは3つ。
+     ・Supabase が理由を付けて返してきた場合 … その理由をそのまま出す
+     ・code は来たのに引き換えられなかった場合 … 別のブラウザで開いた疑い
+     ・うまくいった場合 … 済んだと伝える */
+function reportLoginReturn(signedIn) {
+  const q = new URLSearchParams(location.search);
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const pick = function (k) { return q.get(k) || h.get(k); };
+
+  const why = pick('error_description') || pick('error_code') || pick('error');
+  if (why) { toast('ログインできませんでした：' + decodeURIComponent(why)); return; }
+
+  if (!q.get('code')) return;        // ふつうに開いただけ
+  if (signedIn) { toast('ログインしました'); return; }
+
+  /* 引き換えの鍵は、申し込んだブラウザの中にだけ残る。
+     別のブラウザ（メールアプリの中の簡易ブラウザなど）で開くと見つからない。 */
+  toast('あと一歩でした。メールのリンクは、申し込んだのと同じブラウザで開いてください');
 }
 
 /* 戻ってきた直後のアドレスには `?code=...` が残る。
