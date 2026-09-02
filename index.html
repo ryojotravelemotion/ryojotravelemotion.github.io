@@ -3827,6 +3827,35 @@ function introPadding() {
   return { top: 40, bottom: 40, left: 40, right: Math.round(Math.min(cardSpace, w * 0.66)) };
 }
 
+/* 旅の全体を映すあいだの余白。
+
+   introPadding は章のカードのぶんを空ける。だが全体像を映しているあいだ、
+   カードはまだ出ていない。出ていないものの場所を空けたまま日本を収めると、
+   収まる先が画面の半分しか残らない。
+
+   狭い画面ではこれが効いた。実測（iPhone・地図は390×376）で
+
+     いままで  z2.4   日本は画面の3分の1ほど。まわりは中国も南洋も入る
+     これから  z3.2   日本が画面いっぱいに入る
+
+   倍率が下がると、地図の画像も粗いものに替わる。低い倍率では日本の外まで
+   一枚の絵で覆うことになるので、同じ1枚が受け持つ範囲が広くなるためで、
+   z2.4 と z3.2 では、日本にあたる部分の細かさが縦横それぞれ2倍違う。
+   画面で日本が小さいことと、その日本が粗いことは、同じ一つのことだった。
+
+   さらに、カードは消えるとき opacity を0にするだけで、場所は残したままになる。
+   そのため2周目の全体像では、1周目より深く空いてしまっていた（最後に映した
+   那覇のぶんの高さが残る）。ここでカードを数えないことで、それも揃う。
+
+   広い画面ではカードは右に出て、行程表も並ぶ。そちらは introPadding のまま。 */
+function introOverviewPadding() {
+  if (window.innerWidth >= 900) return introPadding();
+  return { top: 14, bottom: 18, left: 14, right: 14 };
+}
+
+// 枠のまわりに残す余白。狭い画面では、上の余白と重ねて取りすぎないよう詰める。
+function introFitPad() { return window.innerWidth < 900 ? 8 : 30; }
+
 function introBounds() {
   const b = new maplibregl.LngLatBounds();
   INTRO_SPOTS.forEach(function (s) { b.extend(s.coord); });
@@ -3855,10 +3884,10 @@ async function runIntro(my) {
   if (!introOn || my !== introSeq) return;
 
   // 線路をたどる経路は取得に少しかかる。出来上がるまで全体像を見せておく。
-  map.setPadding(introPadding());
+  map.setPadding(introOverviewPadding());
   drawRoute([]);
   map.fitBounds(introBounds(), {
-    padding: 30, bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
+    padding: introFitPad(), bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
   });
 
   await buildIntroLegs();
@@ -3876,12 +3905,12 @@ async function runIntro(my) {
 
   while (introOn && my === introSeq && round < INTRO_ROUNDS) {
     round++;
-    map.setPadding(introPadding());
+    map.setPadding(introOverviewPadding());
     drawRoute([]);
     ttReset();
 
     map.fitBounds(introBounds(), {
-      padding: 30, bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
+      padding: introFitPad(), bearing: 0, pitch: 0, duration: INTRO_OVERVIEW, essential: true
     });
     await sleep(INTRO_OVERVIEW);
     if (!introOn || my !== introSeq) break;
@@ -3900,8 +3929,12 @@ async function runIntro(my) {
       const s = INTRO_SPOTS[i];
 
       if (i === 0) {
+        /* ここから章のカードが出るので、そのぶんの余白へ戻す。
+           setPadding で切り替えると地図がその場で跳ねるため、
+           寄っていく動きに混ぜて、時間をかけて移す。 */
         map.flyTo({ center: s.coord, zoom: s.zoom, pitch: s.pitch,
                     bearing: NORTH_UP ? 0 : s.bearing,
+                    padding: introPadding(),
                     duration: INTRO_IN, essential: true });
         await sleep(INTRO_IN);
         if (!introOn || my !== introSeq) break;
@@ -3975,11 +4008,11 @@ async function runIntro(my) {
   // 止まるときは、旅の全体が見える形にしておく
   if (introOn && my === introSeq) {
     ttAt(INTRO_SPOTS.length - 1);
-    map.setPadding(introPadding());
+    map.setPadding(introOverviewPadding());
     drawRoute(introRouteUpTo(INTRO_SPOTS.length - 1));
     map.easeTo({ center: introBounds().getCenter(), bearing: 0, pitch: 0,
                  duration: 2000, essential: true });
-    map.fitBounds(introBounds(), { padding: 30, bearing: 0, pitch: 0,
+    map.fitBounds(introBounds(), { padding: introFitPad(), bearing: 0, pitch: 0,
                                    duration: 2000, essential: true });
   }
 }
