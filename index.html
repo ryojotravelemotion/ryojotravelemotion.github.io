@@ -4831,8 +4831,9 @@ async function stations() {
   return stationIndex;
 }
 
-// 探している文字に近い駅ほど上へ。前から一致するものを優先する。
-function stationScore(name, q) {
+/* 探している文字に近いものほど上へ。前から一致するものを優先する。
+   駅にも地名にも使う。 */
+function nameScore(name, q) {
   if (name === q) return 0;
   if (name.indexOf(q) === 0) return 1;
   if (name.indexOf(q) > 0) return 2;
@@ -4861,7 +4862,7 @@ async function searchStations(text, limit) {
   for (let i = 0; i < list.length; i++) {
     let sc = 9;
     for (let k = 0; k < qs.length; k++) {
-      sc = Math.min(sc, stationScore(list[i].name, qs[k]));
+      sc = Math.min(sc, nameScore(list[i].name, qs[k]));
     }
     if (sc < 9) hit.push({ s: list[i], sc: sc });
   }
@@ -4933,7 +4934,7 @@ async function searchPlaces(text) {
   // 手元の駅と、外の地名は同時に走らせる。遅いほうに引きずられない。
   const both = await Promise.all([
     searchStations(text, 4),
-    searchAddress(text, 12)
+    searchAddress(text, 30)
   ]);
   const st = both[0], ad = both[1];
 
@@ -4941,14 +4942,42 @@ async function searchPlaces(text) {
      「北海道札幌市東区」のような的外れが並ぶので、
      入れた言葉（または「駅」を外したもの）を含むものだけ残す。 */
   const qs = stationQueries(text);
-  const near = ad.filter(function (a) {
-    const wanted = qs.some(function (q) { return a.name.indexOf(q) >= 0; });
-    if (!wanted) return false;
-    // 駅と同じ場所を、地名側でもう一度出さない
-    return !st.some(function (s) { return dist(s.coord, a.coord) * 111 < 0.4; });
+  const near = [];
+  for (let i = 0; i < ad.length; i++) {
+    const a = ad[i];
+    let sc = 9;
+    for (let k = 0; k < qs.length; k++) sc = Math.min(sc, nameScore(a.name, qs[k]));
+    if (sc === 9) continue;
+    /* 駅と同じものを、地名側でもう一度出さない。
+       場所が近いか、名前が同じなら、同じものとみなす。
+       地理院の持つ駅の位置は、国土数値情報のものと数百m離れていることがあり、
+       「有馬温泉駅」が二度並んでいた。 */
+    if (st.some(function (s) {
+      return s.name === a.name || dist(s.coord, a.coord) * 111 < 0.4;
+    })) continue;
+    near.push({ a: a, sc: sc });
+  }
+
+  /* 地理院は思い当たった順に返してくるだけで、近い名前が先とは限らない。
+     「大阪国際空港」と入れると「豊中郵便局大阪国際空港内分室」が先に来る。
+     打った言葉そのもの、次に前から一致するもの、同じなら短いものを上へ。 */
+  near.sort(function (x, y) {
+    if (x.sc !== y.sc) return x.sc - y.sc;
+    return x.a.name.length - y.a.name.length;
   });
 
-  return st.concat(near).slice(0, 6);
+  const out = st.concat(near.map(function (h) { return h.a; })).slice(0, 6);
+  if (out.length) return out;
+
+  /* ここまでで何も残らなかったとき。
+
+     地理院は読みでも探してくれる。「ナガシマ」と入れると
+     「長島温泉」「長島峠」を返す。打った文字が名前に入っていないので、
+     上の網に全部かかって消えていた。
+     ほかに出すものが無いなら、網をかけずにそのまま見せたほうがよい。 */
+  const loose = ad.slice(0, 6);
+  loose.loose = true;
+  return loose;
 }
 
 $('#q').addEventListener('input', function () {
@@ -5007,7 +5036,9 @@ function renderResults(list) {
     return;
   }
 
-  let msg = '選ぶと訪れた場所として追加されます';
+  let msg = list.loose
+    ? '打った文字と読みが近いものです'
+    : '選ぶと訪れた場所として追加されます';
   if (armedVia) {
     const s = spots.find(function (x) { return x.id === armedVia; });
     const role = (s && isRail(s.mode)) ? stationRole(viaList(s).length) : '経由地';
