@@ -259,6 +259,10 @@ body.has-spots #searchBox .nextHead { display: flex; }
   font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 10px rgba(0,0,0,.45); cursor: pointer; transition: transform .25s; }
 .pin.on { transform: scale(1.5); background: #fff; color: var(--accent-d); }
+/* 同じ場所へ二度以上立ち寄る旅程では、番号を並べて出すので横に伸びる。
+   丸のままだと数字がはみ出すため、横長の小判にする。 */
+.pin.multi { width: auto; min-width: 26px; padding: 0 8px; border-radius: 13px;
+  letter-spacing: .5px; }
 .vpin { width: 11px; height: 11px; border-radius: 50%; background: #fff;
   border: 2px solid var(--accent); box-shadow: 0 1px 5px rgba(0,0,0,.5); }
 
@@ -3785,11 +3789,34 @@ function introCardWidth(winW) {
    空ける量はカードの実寸から出す。章ごとに文章の長さが違うので、
    決め打ちでは合わない。広い画面ではカードが横に出るので、何もしない。 */
 function storyPadding() {
-  if (window.innerWidth >= 900) return { top: 0, bottom: 0, left: 0, right: 0 };
-
-  const box = document.querySelector('.chap.active .box');
   const map1 = map.getContainer().getBoundingClientRect();
   const h = map1.height || 600;
+
+  /* 広い画面では、章のカードが地図の左に重なっている。
+     ここを空けずにいると、地図の真ん中＝カードの裏あたりになり、
+     いま引いている線がカードに隠れて見えなかった。
+     カードの右端までを空け、見えている側の真ん中を使う。 */
+  if (window.innerWidth >= 900) {
+    const w = map1.width || 1000;
+    const card = document.querySelector('.chap.active .box') ||
+                 document.querySelector('#story .inner');
+    let left = 0;
+    if (card) {
+      const r = card.getBoundingClientRect();
+      if (r.width) left = Math.max(0, r.right - map1.left + 24);
+    }
+    let right = ttSpace();          // 行程表が立っていれば、その幅も空ける
+
+    // 空けすぎると見える幅が無くなる。両側あわせて7割まで。
+    const cap = w * 0.7;
+    if (left + right > cap) {
+      const k = cap / (left + right);
+      left *= k; right *= k;
+    }
+    return { top: 40, bottom: 40, left: Math.round(left), right: Math.round(right) };
+  }
+
+  const box = document.querySelector('.chap.active .box');
   if (!box) return { top: 16, bottom: Math.round(h * 0.3), left: 16, right: 16 };
 
   // カードの上端から地図の下端までを、まるごと空ける
@@ -4652,27 +4679,64 @@ function renderMarkers() {
   viaMarkers.forEach(function (m) { m.remove(); });
   markers = []; viaMarkers = [];
 
+  /* 出発地と帰着地が同じ旅程では、ピンがぴったり重なる。
+     あとから立てたほうが上に来るので、往復で「1」が消えて「4」だけが
+     見えていた。同じ場所のものは1つにまとめ、番号を並べて出す。 */
+  const groups = [];
+  const where = {};
   spots.forEach(function (s, i) {
-    const el = document.createElement('div');
-    el.className = 'pin' + (s.id === selectedId ? ' on' : '');
-    el.textContent = String(i + 1);
-    el.addEventListener('click', function () {
-      selectedId = s.id;
-      renderList(); renderMarkers();
-      map.flyTo({ center: s.coord, zoom: 13, pitch: 55, duration: 1500, essential: true });
-    });
-    markers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat(s.coord).addTo(map));
-
-    if (s.id === selectedId) {
-      viaList(s).forEach(function (v, k) {
-        const ve = document.createElement('div');
-        ve.className = 'vpin' + (k === 0 && isRail(s.mode) ? ' first' : '');
-        ve.title = (isRail(s.mode) ? stationRole(k) + '：' : '') + (v.n || '');
-        viaMarkers.push(new maplibregl.Marker({ element: ve, anchor: 'center' })
-          .setLngLat(v.c).addTo(map));
-      });
+    // 小数5桁＝約1m。ここまで同じなら同じ場所とみなす。
+    const key = s.coord[0].toFixed(5) + ',' + s.coord[1].toFixed(5);
+    if (where[key] === undefined) {
+      where[key] = groups.length;
+      groups.push({ coord: s.coord, list: [] });
     }
+    groups[where[key]].list.push({ s: s, i: i });
+  });
+
+  groups.forEach(function (g) {
+    const mine = g.list;
+    const nums = mine.map(function (m) { return m.i + 1; });
+    const el = document.createElement('div');
+    el.className = 'pin' +
+      (mine.some(function (m) { return m.s.id === selectedId; }) ? ' on' : '') +
+      (mine.length > 1 ? ' multi' : '');
+    // 4回以上だと横に伸びすぎるので、最初と最後だけにする
+    el.textContent = nums.length <= 3
+      ? nums.join('・')
+      : nums[0] + '…' + nums[nums.length - 1];
+    if (mine.length > 1) {
+      el.title = mine.map(function (m) {
+        return (m.i + 1) + '. ' + (m.s.name || '');
+      }).join('\n');
+    }
+
+    /* 重なっているときは、押すたびに次のものへ移る。
+       そうしないと、まとめた奥のほうを選べない。 */
+    el.addEventListener('click', function () {
+      let k = 0;
+      for (let j = 0; j < mine.length; j++) {
+        if (mine[j].s.id === selectedId) { k = (j + 1) % mine.length; break; }
+      }
+      selectedId = mine[k].s.id;
+      renderList(); renderMarkers();
+      map.flyTo({ center: g.coord, zoom: 13, pitch: 55, duration: 1500, essential: true });
+    });
+
+    markers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(g.coord).addTo(map));
+  });
+
+  // 経由地は、いま選ばれている地点のぶんだけ出す
+  spots.forEach(function (s) {
+    if (s.id !== selectedId) return;
+    viaList(s).forEach(function (v, k) {
+      const ve = document.createElement('div');
+      ve.className = 'vpin' + (k === 0 && isRail(s.mode) ? ' first' : '');
+      ve.title = (isRail(s.mode) ? stationRole(k) + '：' : '') + (v.n || '');
+      viaMarkers.push(new maplibregl.Marker({ element: ve, anchor: 'center' })
+        .setLngLat(v.c).addTo(map));
+    });
   });
 }
 
@@ -5692,6 +5756,8 @@ function ttRun(k, t) {
 
 $('#ttBtn').addEventListener('click', function () {
   const off = document.body.classList.toggle('tt-off');
+  // 行程表のぶんの余白を、出し入れに合わせて取り直す
+  applyStoryPadding();
   toast(off ? '行程表を隠しました' : '行程表を出しました');
 });
 
@@ -5825,6 +5891,10 @@ async function travelToNext() {
   stepping = true;
   stepSkip = false;
   updateStepNav();
+
+  /* 走っているあいだも章のカードは出たままなので、
+     その裏に線が隠れないよう、走り出す前に余白を取り直す。 */
+  applyStoryPadding();
 
   // 出発する章の文章を出したまま走る（自動再生と同じ見え方）
   drawRoute(routeUpTo(from));
