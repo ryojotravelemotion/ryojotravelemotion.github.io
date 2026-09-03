@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  旅情 — 頁の一覧。検索サイトに「うちにはこれだけあります」と伝えるもの。
+
+  旅情は画面の中で場面が変わるだけで、頁そのものは少ない。
+  それでも一覧を置くのは、新しく出したサイトは
+  どこからも案内されていないため、置いておかないと
+  そもそも見に来てもらえないことがあるため。
+
+  頁を増やしたら、ここにも足すこと。
+  lastmod は「最後に中身を変えた日」。だいたいで構わない。
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <url>
+    <loc>https://ryojotravelemotion.github.io/</loc>
+    <lastmod>2026-09-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://ryojotravelemotion.github.io/feed.html</loc>
+    <lastmod>2026-09-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://ryojotravelemotion.github.io/terms.html</loc>
+    <lastmod>2026-08-31</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
+  </url>
+
+  <url>
+    <loc>https://ryojotravelemotion.github.io/privacy.html</loc>
+    <lastmod>2026-08-31</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
+  </url>
+
+</urlset>
