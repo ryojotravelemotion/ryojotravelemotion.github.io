@@ -4888,11 +4888,107 @@ async function stations() {
     const uses = json.stations[name] || [];
     return {
       name: name,
+      key: normKey(name),        // 近さを測るとき毎回作らずに済むよう、ここで作っておく
       coord: uses[0].coord,
       lines: uses.map(function (u) { return (u.line || '').split('_').pop(); })
     };
   });
   return stationIndex;
+}
+
+/* ---------------------------------------------------------------------------
+   打ち間違いに近いものを見つける
+
+   「名古屋港水族館」を「名古屋港水族貫」と打つと、これまでは何も出なかった。
+   打った文字がそのまま入っているものしか探していなかったため。
+
+   ここでは「2文字ずつの重なりの多さ」で近さを測る（ダイス係数）。
+
+     名古屋港 → 名古・古屋・屋港
+     名古屋巷 → 名古・古屋・屋巷
+     重なり2つ／合わせて6つ → 2×2÷6 = 0.67
+
+   編集距離でも測れるが、8,505駅を総当たりするのでこちらのほうが軽い。
+   1文字の違いなら、たいてい 0.6 を超える。
+   --------------------------------------------------------------------------- */
+
+const NEAR_MIN = 0.5;       // これ未満は「近い」と言わない
+const NEAR_MIN_LEN = 3;     // 2文字以下では測らない。当てずっぽうになる
+
+/* ひらがなとカタカナ、全角と半角、伸ばし棒や中黒の違いを無くす。
+   「ディズニーランド」と「ﾃﾞｨｽﾞﾆｰﾗﾝﾄﾞ」を同じものとして扱えるようにする。 */
+function normKey(str) {
+  return String(str || '')
+    /* NFKC は、半角カナを全角に、全角英数を半角にそろえてくれる。
+       「ﾃﾞｨｽﾞﾆｰﾗﾝﾄﾞ」が「ディズニーランド」になる。
+       濁点の分かれた「ﾃ + ﾞ」も1文字にまとまる。 */
+    .normalize('NFKC')
+    .replace(/[\u3041-\u3096]/g, function (c) {          // ひらがな → カタカナ
+      return String.fromCharCode(c.charCodeAt(0) + 0x60);
+    })
+    .replace(/[\s\u3000・ー－\-—〜~]/g, '')              // 空白・中黒・伸ばし棒
+    .toUpperCase();
+}
+
+function bigrams(t) {
+  if (t.length < 2) return t ? [t] : [];
+  const out = [];
+  for (let i = 0; i < t.length - 1; i++) out.push(t.slice(i, i + 2));
+  return out;
+}
+
+/* 2文字ずつの重なりは、短い言葉に弱い。
+   「有馬温泉」と「有馬音泉」は1文字違いなのに、
+   3組のうち2組が壊れて 0.33 まで落ちる。
+
+   短い言葉では、何文字直せば同じになるか（編集距離）のほうが素直に効く。
+   有馬音泉 → 有馬温泉 は1文字で 1 - 1/4 = 0.75。
+   両方を測って、高いほうを採る。 */
+function editSim(a, b) {
+  const la = a.length, lb = b.length;
+  if (!la || !lb) return 0;
+  if (Math.abs(la - lb) > 2) return 0;        // 長さが違いすぎるものは見ない
+
+  let prev = new Array(lb + 1);
+  let cur = new Array(lb + 1);
+  for (let j = 0; j <= lb; j++) prev[j] = j;
+
+  for (let i = 1; i <= la; i++) {
+    cur[0] = i;
+    const ca = a.charCodeAt(i - 1);
+    for (let j = 1; j <= lb; j++) {
+      const cost = (ca === b.charCodeAt(j - 1)) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    const t = prev; prev = cur; cur = t;
+  }
+  return 1 - prev[lb] / Math.max(la, lb);
+}
+
+/* 2つの測り方を半分ずつ混ぜる。
+
+   高いほうを採ると、当てずっぽうまで拾ってしまう。
+   「東京駅前」と「伊野駅前」は4文字中2文字違いなので編集距離では 0.5 だが、
+   語の重なりは 0.33 しかなく、実際まるで別の駅である。
+   混ぜれば 0.42 に下がり、境目（0.5）の下に落ちる。
+
+   逆に「有馬音泉」と「有馬温泉」は、重なりが 0.33 と低くても
+   編集距離が 0.75 あるので 0.54 で残る。
+   どちらか一方では、これを両立できない。 */
+function nearSim(a, b) {
+  return 0.5 * diceSim(a, b) + 0.5 * editSim(a, b);
+}
+
+function diceSim(a, b) {
+  const A = bigrams(a), B = bigrams(b);
+  if (!A.length || !B.length) return 0;
+  const bag = {};
+  for (let i = 0; i < B.length; i++) bag[B[i]] = (bag[B[i]] || 0) + 1;
+  let hit = 0;
+  for (let i = 0; i < A.length; i++) {
+    if (bag[A[i]] > 0) { bag[A[i]]--; hit++; }
+  }
+  return 2 * hit / (A.length + B.length);
 }
 
 /* 探している文字に近いものほど上へ。前から一致するものを優先する。
@@ -4921,12 +5017,13 @@ async function searchStations(text, limit) {
     return [];
   }
 
-  const qs = stationQueries(text);
+  // ひらがな・半角カナで打たれても当たるよう、両方そろえてから比べる
+  const qs = stationQueries(text).map(normKey);
   const hit = [];
   for (let i = 0; i < list.length; i++) {
     let sc = 9;
     for (let k = 0; k < qs.length; k++) {
-      sc = Math.min(sc, nameScore(list[i].name, qs[k]));
+      sc = Math.min(sc, nameScore(list[i].key, qs[k]));
     }
     if (sc < 9) hit.push({ s: list[i], sc: sc });
   }
@@ -4935,19 +5032,57 @@ async function searchStations(text, limit) {
     return a.s.name.length - b.s.name.length;
   });
 
-  return hit.slice(0, limit).map(function (h) {
-    const ln = h.s.lines.slice(0, 2).join('・');
-    /* 国土数値情報は「東京」のように駅名だけを持っている。
-       そのまま地点の名前にすると、旅程に「東京」と並んで
-       街のことなのか駅のことなのか分からなくなる。「駅」を補う。 */
-    const nm = /駅$/.test(h.s.name) ? h.s.name : h.s.name + '駅';
-    return {
-      name: nm,
-      address: ln + (h.s.lines.length > 2 ? ' ほか' : ''),
-      cats: ['rail_station'],          // 駅の印。表示側がこれを見て駅と判断する
-      coord: h.s.coord
-    };
-  });
+  return hit.slice(0, limit).map(function (h) { return stationResult(h.s); });
+}
+
+/* 駅ひとつを、候補の形に直す。ぴったり探すときも、近いものを探すときも通る。 */
+function stationResult(st) {
+  const ln = st.lines.slice(0, 2).join('・');
+  /* 国土数値情報は「東京」のように駅名だけを持っている。
+     そのまま地点の名前にすると、旅程に「東京」と並んで
+     街のことなのか駅のことなのか分からなくなる。「駅」を補う。 */
+  const nm = /駅$/.test(st.name) ? st.name : st.name + '駅';
+  return {
+    name: nm,
+    address: ln + (st.lines.length > 2 ? ' ほか' : ''),
+    cats: ['rail_station'],          // 駅の印。表示側がこれを見て駅と判断する
+    coord: st.coord
+  };
+}
+
+// 打ち間違いに近い駅を、近い順に返す
+async function nearStations(text, limit) {
+  /* 国土数値情報は「東京」のように駅名だけを持っているので、
+     「東今日駅」と打たれたら「東今日」でも測る。 */
+  const qs = stationQueries(text).map(normKey)
+    .filter(function (q) { return q.length >= NEAR_MIN_LEN; });
+  if (!qs.length) return [];
+
+  let list;
+  try { list = await stations(); } catch (err) { return []; }
+
+  const hit = [];
+  for (let i = 0; i < list.length; i++) {
+    let sc = 0;
+    for (let k = 0; k < qs.length; k++) sc = Math.max(sc, nearSim(qs[k], list[i].key));
+    if (sc >= NEAR_MIN) hit.push({ s: list[i], sc: sc });
+  }
+  hit.sort(function (a, b) { return b.sc - a.sc; });
+  return hit.slice(0, limit).map(function (h) { return stationResult(h.s); });
+}
+
+/* 地名は手元に無いので、こちらで近さを測れない。
+   代わりに、打った言葉を短くしてもう一度聞く。
+   「名古屋港水族貫」→「名古屋港水」で名古屋港水族館に当たる。
+   聞き直すのは1回だけ。当たらなければ諦める。 */
+async function nearAddress(text, limit) {
+  const q = text.trim();
+  /* 短い言葉を3割も削ると、手がかりまで消える。
+     5文字までは末尾1文字だけ、それより長ければ3割を落とす。 */
+  const cut = q.length <= 5 ? q.length - 1 : Math.ceil(q.length * 0.7);
+  if (cut < 2 || cut >= q.length) return [];
+  const r = await searchAddress(q.slice(0, cut), limit);
+  return r.list;
 }
 
 /* 地名は外に聞きに行く。返ってこないことがあるので、待つのは数秒まで。
@@ -5024,12 +5159,13 @@ async function searchPlaces(text) {
   /* 地理院は一文字でも当たると返してくる。「東京駅」で
      「北海道札幌市東区」のような的外れが並ぶので、
      入れた言葉（または「駅」を外したもの）を含むものだけ残す。 */
-  const qs = stationQueries(text);
+  const qs = stationQueries(text).map(normKey);
   const near = [];
   for (let i = 0; i < ad.length; i++) {
     const a = ad[i];
+    const an = normKey(a.name);
     let sc = 9;
-    for (let k = 0; k < qs.length; k++) sc = Math.min(sc, nameScore(a.name, qs[k]));
+    for (let k = 0; k < qs.length; k++) sc = Math.min(sc, nameScore(an, qs[k]));
     if (sc === 9) continue;
     /* 駅と同じものを、地名側でもう一度出さない。
        場所が近いか、名前が同じなら、同じものとみなす。
@@ -5055,15 +5191,43 @@ async function searchPlaces(text) {
   // 地名のほうが通じていないなら、「無い」ではなく「分からなかった」
   if (adFailed) { const bad = []; bad.failed = true; return bad; }
 
-  /* ここまでで何も残らなかったとき。
+  /* ここから先は「打った通りのものは無かった」場合。
+     何も出さずに終わらせず、近いものを集めて出す。集めるのは3種類。
 
-     地理院は読みでも探してくれる。「ナガシマ」と入れると
-     「長島温泉」「長島峠」を返す。打った文字が名前に入っていないので、
-     上の網に全部かかって消えていた。
-     ほかに出すものが無いなら、網をかけずにそのまま見せたほうがよい。 */
-  const loose = ad.slice(0, 6);
-  loose.loose = true;
-  return loose;
+       1. 地理院が読みで拾ったもの
+          「ナガシマ」に対する「長島温泉」。打った文字が名前に入って
+          いないので上の網で落ちるが、たいていこれが正解である。
+       2. 打ち間違いに近い駅（手元で測るので通信は起きない）
+       3. それでも無いときだけ、言葉を短くして地理院へ聞き直す */
+  const cands = [];
+  const seen = {};
+  function add(r) {
+    const k = r.coord[0].toFixed(4) + ',' + r.coord[1].toFixed(4);
+    if (seen[k]) return;
+    seen[k] = true;
+    cands.push(r);
+  }
+
+  ad.forEach(add);
+  (await nearStations(text, 6)).forEach(add);
+
+  /* 短くして聞き直すのは、候補があっても必ず行う。
+
+     「名古屋港水族貫」では、地理院が「愛知県名古屋市」を返し、
+     手元からは「名古屋港駅」が挙がる。候補はあるので聞き直さないと、
+     肝心の「名古屋港水族館」だけがどこにも出てこない。
+     ここは通信1回よりも、当てることを採る。 */
+  (await nearAddress(text, 12)).forEach(add);
+  if (!cands.length) return [];
+
+  // 近い順に並べ替える。地理院が読みで拾ったものは 0 になるが、順は保たれる。
+  const qn = normKey(text);
+  cands.forEach(function (r) { r._near = nearSim(qn, normKey(r.name)); });
+  cands.sort(function (a, b) { return b._near - a._near; });
+
+  const res = cands.slice(0, 6);
+  res.near = true;
+  return res;
 }
 
 /* 日本語を打っている最中は、まだ字が決まっていない。
@@ -5138,8 +5302,8 @@ function renderResults(list) {
     return;
   }
 
-  let msg = list.loose
-    ? '打った文字と読みが近いものです'
+  let msg = list.near
+    ? 'もしかして、こちらですか'
     : '選ぶと訪れた場所として追加されます';
   if (armedVia) {
     const s = spots.find(function (x) { return x.id === armedVia; });
