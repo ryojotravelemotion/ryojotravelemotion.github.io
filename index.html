@@ -2467,7 +2467,8 @@ function minDistToLine(gj, c) {
 
 // 2点の両方が近くを通る線を探す。近い順に返す。
 async function findLines(ds, a, b) {
-  const key = a.join(',') + '|' + b.join(',');
+  // 網の広さを鍵に混ぜる。広げて聞き直したとき、狭いままの答えが返らないように。
+  const key = a.join(',') + '|' + b.join(',') + '|' + ds.near;
   if (ds.found[key]) return ds.found[key];
 
   const idx = await lineIndex(ds);
@@ -2505,7 +2506,7 @@ async function findLines(ds, a, b) {
 
 // 片方の点だけを見て、その近くを通る線を集める（乗り換えを探すときに使う）
 async function linesNear(ds, p) {
-  const key = 'near|' + p.join(',');
+  const key = 'near|' + p.join(',') + '|' + ds.near;
   if (ds.found[key]) return ds.found[key];
 
   const idx = await lineIndex(ds);
@@ -2775,7 +2776,44 @@ async function lineReaches(ds, id, a, b) {
   } catch (e) { return false; }
 }
 
+/* たどれなかったとき、網を広げてもう一度だけ試す。
+
+   駅ではなく地名を選んだとき、その座標は町の中心であって駅前ではない。
+   「岡山県倉敷市」の点から最寄りの線路までは1,749mあり、
+   ふだんの網（1,500m）に249m足りなかった。
+   そのために倉敷から東京までが直線で描かれていた。
+
+   ただし、いくらでも広げてよいわけではない。
+   苫小牧駅から苫小牧港までは4.2kmで、そこに旅客の線路は実在しない。
+   網を4.5kmまで広げると、無関係の貨物線をつかんで
+   「線路でつながった」ことにしてしまう（実際、2.3kmの妙な線が引けた）。
+
+   そこで、広げてよい量を区間の長さの1割までとする。
+     倉敷→東京   557km の1割 = 55km。3倍（4.5km）が先に効いて 4.5km まで
+     苫小牧駅→港  4.2km の1割 = 421m。ふだんの網より狭いので、広げない
+   遠くへ行く区間ほど、駅までの数kmは誤差になる。近い区間では効かない。 */
+const TRACK_WIDEN_MAX = 3;         // ふだんの網の何倍まで
+const TRACK_WIDEN_RATIO = 0.1;     // 区間の長さの何割まで
+
 async function trackSegment(ds, a, b, line) {
+  const base = ds.near;
+  const room = Math.min(base * TRACK_WIDEN_MAX, dist(a, b) * TRACK_WIDEN_RATIO);
+  const widths = (room > base) ? [base, room] : [base];
+
+  for (let k = 0; k < widths.length; k++) {
+    ds.near = widths[k];
+    try {
+      const seg = await trackSegmentAt(ds, a, b, line);
+      ds.near = base;
+      return seg;
+    } catch (err) {
+      ds.near = base;
+      if (k === widths.length - 1) throw err;
+    }
+  }
+}
+
+async function trackSegmentAt(ds, a, b, line) {
   // 線が選ばれていれば、その上だけをたどる
   if (line && line.id && await lineReaches(ds, line.id, a, b)) {
     const seg = await segmentOn(ds, line.id, a, b);
@@ -3824,7 +3862,8 @@ function storyPadding() {
       const r = card.getBoundingClientRect();
       if (r.width) left = Math.max(0, r.right - map1.left + 24);
     }
-    let right = ttSpace();          // 行程表が立っていれば、その幅も空ける
+    // 行程表と写真の板、覆いの大きいほうに合わせる（同じ右側なので足さない）
+    let right = Math.max(ttSpace(), photoSpace());
 
     // 空けすぎると見える幅が無くなる。両側あわせて7割まで。
     const cap = w * 0.7;
@@ -3843,8 +3882,13 @@ function storyPadding() {
   return { top: 16, bottom: Math.round(Math.max(room, h * 0.25)), left: 16, right: 16 };
 }
 
-function applyStoryPadding() {
-  if (document.body.classList.contains('mode-story')) map.setPadding(storyPadding());
+/* 余白を変えると、地図はその場で跳ねる。
+   写真が出るときのように大きく変わる場面では、時間をかけて滑らせる。 */
+function applyStoryPadding(dur) {
+  if (!document.body.classList.contains('mode-story')) return;
+  const pad = storyPadding();
+  if (dur) map.easeTo({ padding: pad, duration: dur, essential: true });
+  else map.setPadding(pad);
 }
 
 function introPadding() {
@@ -5936,6 +5980,20 @@ function ttSpace() {
   return el.getBoundingClientRect().width + 18;
 }
 
+/* 自動再生で出る写真の板も、地図の右側を覆っている。
+
+   これを数に入れていなかったので、地図の真ん中が板の左端あたりに来て、
+   着いた地点のピンが板に半分隠れていた。
+   出ているあいだだけ、その幅も空ける。 */
+function photoSpace() {
+  const el = $('#photo');
+  if (!el || !el.classList.contains('on')) return 0;
+  const box = map.getContainer().getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (!r.width) return 0;
+  return Math.max(0, box.right - r.left + 16);
+}
+
 // いま見せたい行を、なるべく真ん中に置く
 function ttScrollTo(el, now) {
   if (!el) return;
@@ -6244,7 +6302,23 @@ async function play() {
     if (!playing) break;
 
     const hasPhoto = showPhoto(spots[i]);
-    const hold = hasPhoto ? HOLD_PHOTO : HOLD;
+    let hold = hasPhoto ? HOLD_PHOTO : HOLD;
+
+    /* 写真の板は地図の右側を覆う。そのぶん地図をずらさないと、
+       着いた地点のピンが板の下に潜ってしまう。
+       板が浮かび上がる0.9秒に合わせて滑らせ、滑り終わってから寄りに移る。
+
+       ここで待たずに次の easeTo を始めると、そちらが滑りを打ち消し、
+       余白が元へ戻る。実際それでピンが板の左端に貼りついていた。 */
+    if (hasPhoto) {
+      applyStoryPadding(PHOTO_FADE);
+      await sleep(PHOTO_FADE);
+      if (!playing) break;
+      /* 滑りは requestAnimationFrame で進むので、裏のタブに回されていると
+         途中で止まる。着地だけは確実にしておく。 */
+      applyStoryPadding();
+      hold -= PHOTO_FADE;
+    }
 
     // 止まっている間の動き。回すと方角を見失うので、静かに寄るだけにする。
     const cam = camFor(i);
@@ -6258,6 +6332,7 @@ async function play() {
 
     if (hasPhoto) {
       hidePhoto();
+      applyStoryPadding(PHOTO_FADE);     // 板が引いたぶん、地図を戻す
       await sleep(PHOTO_FADE);
       if (!playing) break;
     }
