@@ -131,10 +131,50 @@ body.has-spots #searchBox { padding: 12px 10px 11px; }
 #guide    { order: 3; }
 #searchBox { order: 4; }
 #listWrap { order: 5; }
+#adSlot   { order: 7; }
 #tools    { order: 8; }
 #account  { order: 9; }
 #credits  { order: 10; }
 body.has-spots #searchBox { order: 6; border-top: 1px solid var(--line); }
+
+/* ---------------------------------------------------------------------------
+   広告
+
+   旅情は「どこへ行ったか」を地点と日付で持っている。
+   これは宿の広告と相性がよい一方、置き方を誤ると旅の記録が
+   通販の頁に見えてしまう。次の3つを守る。
+
+     1. 物語の最中には出さない。出すのは「おわり」と、編集中の脇だけ
+     2. 「広告」と必ず書く（2023年10月からの景品表示法の規制）
+     3. 地の文と同じ見た目にしない。囲って、色を落とす
+   --------------------------------------------------------------------------- */
+#adSlot { padding: 0 10px 10px; display: none; }
+body.has-spots #adSlot { display: block; }
+.adBox { border: 1px solid var(--line); border-radius: 4px;
+  background: var(--card); overflow: hidden; }
+.adTag { display: flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border-bottom: 1px solid var(--line2);
+  font-size: 10.5px; color: var(--muted); letter-spacing: 1px; }
+.adTag b { font-weight: 400; border: 1px solid var(--line);
+  border-radius: 2px; padding: 0 4px; }
+.adRow { display: flex; align-items: center; gap: 9px; padding: 9px;
+  text-decoration: none; color: var(--text); cursor: pointer; }
+.adRow + .adRow { border-top: 1px solid var(--line2); }
+.adRow:hover { background: #f4f1ea; }
+.adRow .ico { flex: none; width: 30px; height: 30px; border-radius: 3px;
+  background: #eef2f4; display: flex; align-items: center;
+  justify-content: center; font-size: 15px; }
+.adRow .tx { flex: 1; min-width: 0; }
+.adRow .t { font-size: 12.5px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.adRow .s { font-size: 10.5px; color: var(--muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adRow .go { flex: none; font-size: 11px; color: var(--accent-d); }
+
+/* おわりの頁に置くほう。物語が終わってから出るので、少し大きく取れる。 */
+#story .end .adBox { margin-top: 26px; text-align: left; }
+#story .end .adLead { margin-top: 26px; font-size: 12.5px; color: var(--muted);
+  letter-spacing: 2px; }
 
 /* 「② 次の場所を検索」の見出し。何番目を作っているのかを示す。
    場所がまだ無いあいだは出さない（そのときは案内文が別に出ている）。 */
@@ -1299,6 +1339,9 @@ body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
       <div id="list"></div>
       <div id="empty">まだ何も追加されていません<br>上の検索欄から、旅の出発地を探してください</div>
     </div>
+
+    <!-- 広告。場所が1つ以上あるときだけ出る（CSS の body.has-spots）。 -->
+    <div id="adSlot"></div>
 
     <div id="tools">
       <button class="btn" id="addBtn">＋ 地図をクリックして追加</button>
@@ -4095,10 +4138,104 @@ function renderGuide() {
   document.body.classList.toggle('has-spots', spots.length > 0);
 }
 
+/* ---------------------------------------------------------------------------
+   広告
+
+   まだ本物の提携先が決まっていないので、いまは見本を出している。
+   AD_DEMO を false にし、AD_LINK が本物のアフィリエイトURLを返すように
+   すれば、そのまま本番になる。押したときの動きだけがここで分かれる。
+
+   置き場所は2つに絞ってある。
+
+     1. おわりの頁 … 物語を見終えた直後。いちばん「行きたい」と思っている
+     2. 編集中の脇 … 一覧の下。作っている最中の人向け
+
+   章のカードの中には置かない。読んでいる最中に宿の名前が挟まると、
+   旅の記録ではなく宣伝の頁に見える。ここは売らない場所と決めておく。
+   --------------------------------------------------------------------------- */
+
+const AD_DEMO = true;                 // 見本のあいだは true
+const AD_SHOP = '楽天トラベル';
+
+// 本番ではここが提携先のURLを返す。いまは押しても飛ばない。
+function AD_LINK(spot) {
+  return null;
+}
+
+/* 泊まったと思われる地点を拾う。
+
+   次の地点で日付が変わっていれば、その晩はここで泊まったことになる。
+   宿の広告を出すなら、この地点がいちばん筋が通る。
+   日付が入っていない旅程では、代わりに最初・真ん中・最後を使う。 */
+function staySpots() {
+  const out = [];
+  for (let i = 0; i < spots.length - 1; i++) {
+    const a = spots[i].date, b = spots[i + 1].date;
+    if (a && b && a !== b) out.push(i);
+  }
+  if (out.length) return out.slice(0, 3);
+
+  const pick = [0, Math.floor((spots.length - 1) / 2), spots.length - 1];
+  const seen = {};
+  return pick.filter(function (i) {
+    if (i < 0 || seen[i]) return false;
+    seen[i] = true;
+    return true;
+  }).slice(0, 3);
+}
+
+function adRow(i) {
+  const s = spots[i];
+  const url = AD_LINK(s);
+  const el = document.createElement(url ? 'a' : 'div');
+  el.className = 'adRow';
+  if (url) { el.href = url; el.target = '_blank'; el.rel = 'nofollow sponsored noopener'; }
+
+  el.innerHTML = '<div class="ico">🛏</div><div class="tx">' +
+    '<div class="t"></div><div class="s"></div></div>' +
+    '<div class="go">見る ›</div>';
+  el.querySelector('.t').textContent = (s.name || '') + ' のまわりの宿';
+  el.querySelector('.s').textContent = AD_SHOP + (s.date ? '　' + s.date + ' 泊' : '');
+
+  if (!url) {
+    el.addEventListener('click', function () {
+      toast('見本です。ここに宿の予約ページが開きます');
+    });
+  }
+  return el;
+}
+
+/* 広告のひと固まりを作る。中身が無ければ null を返す（枠だけ残さない）。 */
+function adBox(lead) {
+  if (spots.length < 1) return null;
+
+  const box = document.createElement('div');
+  box.className = 'adBox';
+
+  const tag = document.createElement('div');
+  tag.className = 'adTag';
+  tag.innerHTML = '<b>広告</b>';
+  tag.appendChild(document.createTextNode(
+    (lead || '泊まった場所の宿') + (AD_DEMO ? '（見本）' : '')));
+  box.appendChild(tag);
+
+  staySpots().forEach(function (i) { box.appendChild(adRow(i)); });
+  return box;
+}
+
+function renderAdSlot() {
+  const slot = $('#adSlot');
+  if (!slot) return;
+  slot.innerHTML = '';
+  const box = adBox();
+  if (box) slot.appendChild(box);
+}
+
 function renderAll() {
   renderList();
   renderMarkers();
   renderGuide();
+  renderAdSlot();
   if (!playing) drawRoute(routeUpTo(spots.length - 1));
   renderStory();
   $('#topbar .ttl').textContent = tripName || defaultTripName();
@@ -5571,6 +5708,17 @@ function renderStory() {
   end.innerHTML = '<div class="panel"><h2>よい旅を。</h2>' +
     '<p style="color:var(--muted);font-size:12px;margin-top:12px;letter-spacing:2px;">' +
     '旅情 &nbsp;RYOJO</p></div>';
+
+  /* 見終えた直後に、同じ旅をなぞるための入口を置く。
+     物語の最中には出さないと決めているので、出せるのはここだけ。 */
+  const ad = adBox('この旅をなぞる');
+  if (ad) {
+    const lead = document.createElement('div');
+    lead.className = 'adLead';
+    lead.textContent = '同じ道を行くなら';
+    end.querySelector('.panel').appendChild(lead);
+    end.querySelector('.panel').appendChild(ad);
+  }
   box.appendChild(end);
 
   renderTimetable(spots, legs);
