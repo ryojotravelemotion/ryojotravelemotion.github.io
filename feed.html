@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>みんなの旅 — 旅情（下書き）</title>
+
+<!--
+  みんなの旅（見た目の下書き）
+
+  中身は作り物です。サーバーには繋いでいません。
+  形を決めるための紙で、決まったら index.html の中へ移し、
+  posts の中身で置き換えます。
+
+  ここで確かめたいこと
+    ・旅程という形式が、一覧の中でどう見えるか
+    ・写真とちがって「線」は小さくすると読めない。どこまで縮められるか
+    ・題名・書き出し・経路・書いた人、どれを大きく出すか
+-->
+
+<style>
+:root {
+  --bg:      #f5f1e8;
+  --panel:   #fbf8f2;
+  --card:    #ffffff;
+  --line:    #ded6c7;
+  --line2:   #ebe4d8;
+  --text:    #1b2a41;
+  --muted:   #5f6d7c;
+  --accent:  #357a8f;
+  --accent-d:#1b4f63;
+  --shadow:  0 2px 14px rgba(27,42,65,.10);
+  --shadow-l:0 18px 50px rgba(15,26,40,.30);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Segoe UI", "Hiragino Mincho ProN", "Yu Mincho",
+               "Hiragino Sans", "Noto Sans JP", sans-serif; }
+button { cursor: pointer; font-family: inherit; }
+
+/* ---------------------------------------------------------------------------
+   上の帯
+   --------------------------------------------------------------------------- */
+header { position: sticky; top: 0; z-index: 10;
+  background: linear-gradient(rgba(245,241,232,.97), rgba(245,241,232,.92));
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px); }
+.bar { max-width: 1180px; margin: 0 auto; padding: 13px 22px;
+  display: flex; align-items: center; gap: 16px; }
+.bar h1 { margin: 0; font-size: 19px; letter-spacing: 7px; text-indent: 7px; font-weight: 600;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.bar .sub { font-size: 10.5px; color: var(--muted); letter-spacing: 2px; }
+.bar .sp { flex: 1; }
+.bar button { padding: 8px 15px; font-size: 12px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+nav { max-width: 1180px; margin: 0 auto; padding: 0 22px;
+  display: flex; gap: 22px; }
+nav button { background: none; border: 0; padding: 0 0 11px; font-size: 12.5px;
+  color: var(--muted); border-bottom: 2px solid transparent; letter-spacing: 1px; }
+nav button.on { color: var(--accent-d); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   一覧
+
+   写真だけを並べると、ただの写真投稿になる。旅情の投稿は「どこから
+   どこへ、何で動いたか」を持っているので、そこを札にして前へ出す。
+   --------------------------------------------------------------------------- */
+main { max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; }
+
+.grid { display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
+
+.post { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  transition: transform .18s ease, box-shadow .18s ease; }
+.post:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(27,42,65,.14); }
+
+.post .cover { position: relative; aspect-ratio: 16 / 10; background: #e6e1d6; }
+.post .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.post .cover .none { position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; font-size: 11px; color: #a9a08e;
+  background: repeating-linear-gradient(45deg, #f0ece2, #f0ece2 9px, #eae5d9 9px, #eae5d9 18px); }
+
+/* 経路の札。写真の上に重ねる。ここが旅情の投稿の顔になる。 */
+.post .route { position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 26px 13px 10px; color: #fff;
+  background: linear-gradient(transparent, rgba(12,22,34,.82)); }
+.post .route .ends { font-size: 14px; letter-spacing: 1px; display: flex;
+  align-items: center; gap: 7px; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.post .route .ends .ar { opacity: .7; font-size: 11px; }
+.post .route .modes { margin-top: 5px; display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; opacity: .92; }
+.post .route .modes .m { font-size: 13px; }
+.post .route .modes .km { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.post .body { padding: 13px 15px 15px; display: flex; flex-direction: column; flex: 1; }
+.post h2 { margin: 0; font-size: 15.5px; line-height: 1.5; letter-spacing: .5px;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.post .lead { margin: 7px 0 0; font-size: 12px; line-height: 1.9; color: #33445a;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.post .foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line2);
+  display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.post .foot .av { width: 21px; height: 21px; border-radius: 50%; flex: none;
+  background: var(--accent); color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center; }
+.post .foot .sp { flex: 1; }
+.post .foot .re { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------------
+   一列に並べる見せ方（切り替えて比べる）
+
+   札の形は写真が主役になる。旅程を主役にするなら、
+   経路を横に伸ばして読ませるほうが合うかもしれない。
+   --------------------------------------------------------------------------- */
+.grid.rows { grid-template-columns: 1fr; gap: 12px; }
+.grid.rows .post { flex-direction: row; }
+.grid.rows .post .cover { aspect-ratio: auto; width: 210px; flex: none; }
+.grid.rows .post .route { display: none; }
+.grid.rows .post .body { padding: 15px 18px; }
+.grid.rows .post .line { display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--accent-d); margin-bottom: 7px; }
+.grid.rows .post .line .km { color: var(--muted); font-variant-numeric: tabular-nums; }
+.grid .post .line { display: none; }
+
+@media (max-width: 560px) {
+  .grid.rows .post { flex-direction: column; }
+  .grid.rows .post .cover { width: 100%; aspect-ratio: 16 / 10; }
+}
+
+/* 下書きであることの断り。
+
+   これまでは頁の下に小さく書いてあるだけだった。
+   本体から「みんなの旅」で来られるようにした以上、
+   来た人が最初に目にする場所に置かないと、作り物の投稿を
+   本物の旅の記録として読んでしまう。 */
+.draft { background: #4a3f2e; color: #f3ead9; text-align: center;
+  padding: 8px 16px; font-size: 12.5px; letter-spacing: 1px; line-height: 1.7; }
+.draft b { color: #ffd98a; font-weight: 600; }
+
+/* 題字と「旅を書く」から、旅情本体へ戻れるようにする。
+   下書きの頃はどちらも押せない飾りだった。 */
+.home { text-decoration: none; color: inherit; }
+a.primary { display: inline-flex; align-items: center; text-decoration: none; }
+
+.note { max-width: 1180px; margin: 0 auto; padding: 0 22px 40px;
+  font-size: 11px; line-height: 2; color: var(--muted); }
+.note b { color: var(--accent-d); }
+</style>
+</head>
+<body>
+
+<div class="draft">
+  <b>これは見本の画面です。</b>
+  並んでいる6件の旅は、形を決めるためにこちらで書いた作り物で、
+  実在の投稿ではありません。
+</div>
+
+<header>
+  <div class="bar">
+    <a class="home" href="index.html"><h1>旅情</h1></a>
+    <span class="sub">みんなの旅</span>
+    <span class="sp"></span>
+    <button id="layout">一列で見る</button>
+    <a class="primary" href="index.html">旅を書く</a>
+  </div>
+  <nav>
+    <button class="on">みんなの旅</button>
+    <button>自分の投稿</button>
+    <button>設定</button>
+  </nav>
+</header>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="note">
+  これは見た目の下書きです。中身は作り物で、サーバーには繋いでいません。<br>
+  <b>「一列で見る」</b>を押すと、もうひとつの並べ方に切り替わります。どちらが読みやすいか比べてください。
+</div>
+
+<script>
+/* 作り物の投稿。posts の1行が持つものと同じ形にしてある。
+   journey は旅情の旅程そのもの。ここでは一覧に出す分だけを抜いてある。 */
+const MODE_ICO = { railTrack: '🚆', transit: '🚌', driving: '🚗',
+                   walking: '🚶', cycling: '🚴', ferry: '🚢', flight: '✈️' };
+
+const POSTS = [
+  { title: '八月、日本を縦に貫いた九日間',
+    body: '朝いちばんの札幌駅。まだ人のまばらな改札を抜けて、南へ向かう列車に乗った。ここから那覇まで二千キロ。地図の上では、ただの一本の線になる。船で一晩かけて太平洋を南下し、大洗に着いたときには、もう本州の匂いがしていた。',
+    from: '札幌', to: '那覇', modes: ['railTrack','ferry','transit','driving','flight'],
+    km: 2897, spots: 7, author: 'はる', at: '3日前', replies: 4, cover: 'ogp.jpg' },
+
+  { title: '山陰本線、日本海を左に見て',
+    body: '特急を使わないと決めた時点で、この旅は半分決まっていた。乗り換えのたびにホームで待つ二十分が、いちばん記憶に残っている。',
+    from: '鳥取', to: '出雲市', modes: ['railTrack'],
+    km: 178, spots: 9, author: 'みさき', at: '5日前', replies: 2, cover: null },
+
+  { title: '瀬戸内、島から島へ',
+    body: 'しまなみ海道を自転車で渡りきるつもりだったが、三日目に雨が降って、結局フェリーに乗った。島と島を繋ぐ船は一日に四便しかない。',
+    from: '尾道', to: '今治', modes: ['cycling','ferry'],
+    km: 78, spots: 6, author: 'こう', at: '1週間前', replies: 7, cover: null },
+
+  { title: '冬の東北、駅で眠った夜のこと',
+    body: '雪で列車が止まり、その日は駅の待合室で夜を明かした。ストーブの前に同じ境遇の人が四人いて、誰も何も言わずに朝を待った。',
+    from: '仙台', to: '青森', modes: ['railTrack','transit'],
+    km: 386, spots: 8, author: 'あき', at: '2週間前', replies: 11, cover: null },
+
+  { title: '能登を半周、車で',
+    body: '海沿いの道をひたすら北へ。対向車がほとんど来ない時間帯があって、そのあいだは自分の車の音しか聞こえなかった。',
+    from: '金沢', to: '珠洲', modes: ['driving'],
+    km: 168, spots: 5, author: 'はる', at: '3週間前', replies: 1, cover: null },
+
+  { title: '歩いて越えた、旧街道の峠',
+    body: '一日で越えられると聞いていたが、実際には日が暮れた。峠の上で振り返ると、来た道の灯りが点々と続いていた。',
+    from: '軽井沢', to: '横川', modes: ['walking'],
+    km: 11, spots: 4, author: 'みさき', at: '1か月前', replies: 3, cover: null }
+];
+
+function card(p) {
+  const el = document.createElement('article');
+  el.className = 'post';
+
+  const modes = p.modes.map(function (m) {
+    return '<span class="m">' + (MODE_ICO[m] || '・') + '</span>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="cover">' +
+      (p.cover ? '<img alt="" src="' + p.cover + '">' : '<div class="none">写真がまだありません</div>') +
+      '<div class="route">' +
+        '<div class="ends"><span class="a"></span><span class="ar">▶</span><span class="b"></span></div>' +
+        '<div class="modes">' + modes +
+          '<span class="km"></span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="body">' +
+      '<div class="line"><span class="ends2"></span>' + modes + '<span class="km"></span></div>' +
+      '<h2></h2><p class="lead"></p>' +
+      '<div class="foot"><span class="av"></span><span class="who"></span>' +
+        '<span class="sp"></span><span class="at"></span>' +
+        '<span class="re"></span></div>' +
+    '</div>';
+
+  el.querySelector('.ends .a').textContent = p.from;
+  el.querySelector('.ends .b').textContent = p.to;
+  el.querySelector('.ends2').textContent = p.from + ' ▶ ' + p.to;
+  el.querySelectorAll('.km').forEach(function (k) {
+    k.textContent = p.km.toLocaleString() + 'km ・ ' + p.spots + 'か所';
+  });
+  el.querySelector('h2').textContent = p.title;
+  el.querySelector('.lead').textContent = p.body;
+  el.querySelector('.av').textContent = p.author.slice(0, 1);
+  el.querySelector('.who').textContent = p.author;
+  el.querySelector('.at').textContent = p.at;
+  el.querySelector('.re').textContent = p.replies ? ('返信 ' + p.replies) : '';
+  return el;
+}
+
+const grid = document.getElementById('grid');
+POSTS.forEach(function (p) { grid.appendChild(card(p)); });
+
+document.getElementById('layout').addEventListener('click', function () {
+  const rows = grid.classList.toggle('rows');
+  this.textContent = rows ? '札で見る' : '一列で見る';
+});
+</script>
+</body>
+</html>
