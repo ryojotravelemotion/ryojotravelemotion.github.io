@@ -68,6 +68,18 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 body.mode-story #side { display: none; }
 
 #brand { padding: 16px 16px 13px; border-bottom: 1px solid var(--line); }
+/* 題字と、みんなの旅への入口を横に並べる。
+   入口を下に足すと、そのぶん検索欄が押し下がる。題字の高さに間借りする。 */
+#brand .head { display: flex; align-items: flex-start; gap: 10px; }
+#brand .head .ttl { flex: 1; min-width: 0; }
+
+/* 「みんなの旅」への入口。編集の邪魔をしない大きさに留め、
+   押せることが分かるよう、輪郭のある形にしておく。 */
+.toFeed { flex: none; margin-top: 2px; padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); white-space: nowrap;
+  font-size: 12px; color: var(--accent-d); text-decoration: none;
+  transition: background .2s, border-color .2s; }
+.toFeed:hover { background: #eef3f5; border-color: var(--accent); }
 #brand h1 { margin: 0; font-size: 22px; letter-spacing: 6px;
   font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-weight: 600; }
 #brand p { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); letter-spacing: 1px; }
@@ -373,6 +385,8 @@ body.mode-story #story { display: block; }
   color: var(--text); font-family: inherit; }
 .lineFind:focus { outline: none; border-color: var(--accent); }
 #story .cover p { color: var(--muted); font-size: 13px; letter-spacing: 4px; margin: 22px 0 0; }
+/* 見終えた直後。ほかの人の旅へ移る、いちばん自然な場所。 */
+#story .end .toFeed { display: inline-block; margin-top: 22px; }
 #story .end h2 { font-size: 24px; margin: 0;
   font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
 
@@ -1178,8 +1192,13 @@ body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
 
   <div id="side">
     <div id="brand">
-      <h1>旅情</h1>
-      <p>旅の体験を、動く物語に</p>
+      <div class="head">
+        <div class="ttl">
+          <h1>旅情</h1>
+          <p>旅の体験を、動く物語に</p>
+        </div>
+        <a class="toFeed" href="feed.html">みんなの旅 ›</a>
+      </div>
       <input id="tripName" type="text" placeholder="旅の名前（例：夏の東北ひとり旅）">
     </div>
 
@@ -5772,7 +5791,9 @@ function renderStory() {
   end.className = 'step end';
   end.innerHTML = '<div class="panel"><h2>よい旅を。</h2>' +
     '<p style="color:var(--muted);font-size:12px;margin-top:12px;letter-spacing:2px;">' +
-    '旅情 &nbsp;RYOJO</p></div>';
+    '旅情 &nbsp;RYOJO</p>' +
+    '<a class="toFeed" href="feed.html">ほかの人の旅を見る ›</a>' +
+    '</div>';
   box.appendChild(end);
 
   renderTimetable(spots, legs);
