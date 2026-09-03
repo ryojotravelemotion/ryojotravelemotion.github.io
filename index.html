@@ -4955,9 +4955,17 @@ async function searchStations(text, limit) {
    ここで止まると、手元だけで足りる駅の候補まで出せなくなる。
    実際「一度検索したあと、もう一度打っても候補が出ない」という
    報せがあった。取りこぼしても駅は出す、という作りにしておく。 */
-const GSI_TIMEOUT = 3500;
+const GSI_TIMEOUT = 5000;
+const GSI_TRIES = 2;          // 一度きりで諦めない
 
-async function searchAddress(text, limit) {
+/* 地理院へ一度だけ聞きに行く。
+
+   返り値は { list, failed }。
+   「見つからなかった」と「通じなかった」を必ず分けて返すこと。
+   ここを空配列ひとつで済ませていたために、通信が一度こけただけで
+   その言葉が「見つかりませんでした」として覚え込まれ、
+   何度打ち直しても出てこなくなっていた。 */
+async function gsiOnce(text, limit) {
   let res;
   const stop = new AbortController();
   const timer = setTimeout(function () { stop.abort(); }, GSI_TIMEOUT);
@@ -4965,15 +4973,15 @@ async function searchAddress(text, limit) {
     res = await fetch(GSI_SEARCH + '?q=' + encodeURIComponent(text), { signal: stop.signal });
   } catch (err) {
     console.warn('地名を探せませんでした', err);
-    return [];
+    return { list: [], failed: true };
   } finally {
     clearTimeout(timer);
   }
-  if (!res.ok) return [];
+  if (!res.ok) return { list: [], failed: true };
 
   let json;
-  try { json = await res.json(); } catch (err) { return []; }
-  if (!Array.isArray(json)) return [];
+  try { json = await res.json(); } catch (err) { return { list: [], failed: true }; }
+  if (!Array.isArray(json)) return { list: [], failed: true };
 
   const out = [];
   const seen = {};
@@ -4991,7 +4999,18 @@ async function searchAddress(text, limit) {
 
     out.push({ name: p.title, address: '', cats: [], coord: g.coordinates });
   }
-  return out;
+  return { list: out, failed: false };
+}
+
+// 通じなかったときだけ、間を置いてもう一度聞く
+async function searchAddress(text, limit) {
+  let r = { list: [], failed: true };
+  for (let k = 0; k < GSI_TRIES; k++) {
+    if (k) await sleep(400);
+    r = await gsiOnce(text, limit);
+    if (!r.failed) break;
+  }
+  return r;
 }
 
 async function searchPlaces(text) {
@@ -5000,7 +5019,7 @@ async function searchPlaces(text) {
     searchStations(text, 4),
     searchAddress(text, 30)
   ]);
-  const st = both[0], ad = both[1];
+  const st = both[0], ad = both[1].list, adFailed = both[1].failed;
 
   /* 地理院は一文字でも当たると返してくる。「東京駅」で
      「北海道札幌市東区」のような的外れが並ぶので、
@@ -5033,6 +5052,9 @@ async function searchPlaces(text) {
   const out = st.concat(near.map(function (h) { return h.a; })).slice(0, 6);
   if (out.length) return out;
 
+  // 地名のほうが通じていないなら、「無い」ではなく「分からなかった」
+  if (adFailed) { const bad = []; bad.failed = true; return bad; }
+
   /* ここまでで何も残らなかったとき。
 
      地理院は読みでも探してくれる。「ナガシマ」と入れると
@@ -5044,8 +5066,13 @@ async function searchPlaces(text) {
   return loose;
 }
 
-$('#q').addEventListener('input', function () {
-  const text = this.value.trim();
+/* 日本語を打っている最中は、まだ字が決まっていない。
+
+   「なごやこう」の途中でも input は飛んでくるので、
+   そのたびに地理院へ聞きに行っていた。当たるはずもない問い合わせで、
+   回数だけが増える。変換が決まるまで待って、決まった時点で探す。 */
+function queueSearch(el) {
+  const text = el.value.trim();
   clearTimeout(searchTimer);
 
   if (text.length < 2) {
@@ -5055,9 +5082,16 @@ $('#q').addEventListener('input', function () {
   }
 
   $('#qState').textContent = '入力が止まるのを待っています…';
-
   searchTimer = setTimeout(function () { runSearch(text); }, SEARCH_WAIT);
+}
+
+$('#q').addEventListener('input', function (e) {
+  if (e.isComposing) return;          // 変換中
+  queueSearch(this);
 });
+
+// 変換が決まった瞬間。input が飛ばない場合があるので、ここでも拾う。
+$('#q').addEventListener('compositionend', function () { queueSearch(this); });
 
 /* 一度探した言葉は覚えておく。
 
@@ -5086,8 +5120,10 @@ async function runSearch(text) {
   }
   if (my !== searchSeq) return;
 
-  // 見つからなかったことも覚える。同じ言葉をまた聞きに行かないように。
-  searchCache[text] = list;
+  /* 見つからなかったことも覚える。同じ言葉をまた聞きに行かないように。
+     ただし「通じなかった」ぶんは覚えない。覚えてしまうと、
+     一度の通信の失敗が、その言葉の永久の「見つかりません」になる。 */
+  if (!list.failed) searchCache[text] = list;
   renderResults(list);
 }
 
@@ -5096,7 +5132,9 @@ function renderResults(list) {
   box.innerHTML = '';
 
   if (!list.length) {
-    $('#qState').textContent = '見つかりませんでした';
+    $('#qState').textContent = list.failed
+      ? '地名の検索につながりませんでした。もう一度お試しください'
+      : '見つかりませんでした';
     return;
   }
 
