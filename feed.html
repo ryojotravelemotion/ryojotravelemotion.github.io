@@ -131,6 +131,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; }
   .grid.rows .post .cover { width: 100%; aspect-ratio: 16 / 10; }
 }
 
+/* 押すと、その旅が動き出す。押せることが分かるようにしておく。 */
+.post.open { cursor: pointer; }
+.post.open:hover { border-color: var(--accent); box-shadow: var(--shadow-l); }
+.post.open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* 下書きであることの断り。
 
    これまでは頁の下に小さく書いてあるだけだった。
@@ -156,7 +161,7 @@ a.primary { display: inline-flex; align-items: center; text-decoration: none; }
 <div class="draft">
   <b>これは見本の画面です。</b>
   並んでいる6件の旅は、形を決めるためにこちらで書いた作り物で、
-  実在の投稿ではありません。
+  実在の投稿ではありません。押すと、その旅が実際に動きます。
 </div>
 
 <header>
@@ -179,13 +184,25 @@ a.primary { display: inline-flex; align-items: center; text-decoration: none; }
 </main>
 
 <div class="note">
-  これは見た目の下書きです。中身は作り物で、サーバーには繋いでいません。<br>
+  これは見た目の下書きです。投稿の中身は作り物で、サーバーには繋いでいません。<br>
+  ただし<b>経路は本物</b>です。札を押すと旅情が開き、鉄道は実際の線路を、
+  船は就航中の航路を、車は道路をたどって動きます。<br>
   <b>「一列で見る」</b>を押すと、もうひとつの並べ方に切り替わります。どちらが読みやすいか比べてください。
 </div>
 
 <script>
 /* 作り物の投稿。posts の1行が持つものと同じ形にしてある。
-   journey は旅情の旅程そのもの。ここでは一覧に出す分だけを抜いてある。 */
+
+   journey が旅情の旅程そのもの。押すと index.html へ渡して動かす。
+     n  場所の名前
+     c  座標 [経度, 緯度]
+     m  そこへ「どうやって来たか」。最初の1件では使わない
+     d  日付
+     t  思い出
+
+   座標はでたらめではない。駅は国土数値情報（data/rail/stations.json）から、
+   駅でないものは国土地理院の地名検索から取った実際の座標である。
+   でたらめを置くと線路をたどれず、全部直線で描かれてしまう。 */
 const MODE_ICO = { railTrack: '🚆', transit: '🚌', driving: '🚗',
                    walking: '🚶', cycling: '🚴', ferry: '🚢', flight: '✈️' };
 
@@ -193,33 +210,101 @@ const POSTS = [
   { title: '八月、日本を縦に貫いた九日間',
     body: '朝いちばんの札幌駅。まだ人のまばらな改札を抜けて、南へ向かう列車に乗った。ここから那覇まで二千キロ。地図の上では、ただの一本の線になる。船で一晩かけて太平洋を南下し、大洗に着いたときには、もう本州の匂いがしていた。',
     from: '札幌', to: '那覇', modes: ['railTrack','ferry','transit','driving','flight'],
-    km: 2897, spots: 7, author: 'はる', at: '3日前', replies: 4, cover: 'ogp.jpg' },
+    km: 2897, author: 'はる', at: '3日前', replies: 4, cover: 'ogp.jpg',
+    journey: [
+      { n: '札幌',     c: [141.3507, 43.0687], d: '2026年8月1日', t: '朝いちばんの改札。ここから那覇まで二千キロ。' },
+      { n: '苫小牧港', c: [141.6365, 42.6377], m: 'railTrack', d: '2026年8月1日', t: '船に乗る前に、港でひとつ息をついた。' },
+      { n: '大洗港',   c: [140.5723, 36.3086], m: 'ferry',     d: '2026年8月2日', t: '一晩かけて太平洋を南下。着いたら本州の匂いがした。' },
+      { n: '東京',     c: [139.7671, 35.6812], m: 'transit',   d: '2026年8月2日', t: '人の多さに、旅の途中だということを忘れかけた。' },
+      { n: '大阪',     c: [135.5259, 34.6873], m: 'railTrack', d: '2026年8月5日', t: '三日いた。歩いた距離だけなら、この旅でいちばん長い。' },
+      { n: '広島',     c: [132.4536, 34.3955], m: 'driving',   d: '2026年8月7日', t: '川がいくつも流れていて、そのたびに橋を渡った。' },
+      { n: '那覇',     c: [127.7195, 26.2170], m: 'flight',    d: '2026年8月9日', t: '空から見た海の色で、遠くまで来たことが分かった。' }
+    ] },
 
   { title: '山陰本線、日本海を左に見て',
     body: '特急を使わないと決めた時点で、この旅は半分決まっていた。乗り換えのたびにホームで待つ二十分が、いちばん記憶に残っている。',
     from: '鳥取', to: '出雲市', modes: ['railTrack'],
-    km: 178, spots: 9, author: 'みさき', at: '5日前', replies: 2, cover: null },
+    km: 178, author: 'みさき', at: '5日前', replies: 2, cover: null,
+    journey: [
+      { n: '鳥取駅',     c: [134.22609, 35.49422], d: '2026年7月18日', t: '特急を使わないと決めた時点で、この旅は半分決まっていた。' },
+      { n: '湖山駅',     c: [134.18625, 35.51352], m: 'railTrack', d: '2026年7月18日', t: '' },
+      { n: '倉吉駅',     c: [133.84949, 35.45481], m: 'railTrack', d: '2026年7月18日', t: '乗り換えの二十分。ホームの端まで歩いて戻ってきた。' },
+      { n: '米子駅',     c: [133.33668, 35.42334], m: 'railTrack', d: '2026年7月19日', t: '' },
+      { n: '安来駅',     c: [133.25923, 35.42802], m: 'railTrack', d: '2026年7月19日', t: '' },
+      { n: '松江駅',     c: [133.06397, 35.46409], m: 'railTrack', d: '2026年7月19日', t: '宍道湖のほうへ少し歩いた。日が落ちるのを見ていた。' },
+      { n: '玉造温泉駅', c: [133.01218, 35.43072], m: 'railTrack', d: '2026年7月20日', t: '' },
+      { n: '宍道駅',     c: [132.90923, 35.40687], m: 'railTrack', d: '2026年7月20日', t: '' },
+      { n: '出雲市駅',   c: [132.756, 35.36062],   m: 'railTrack', d: '2026年7月20日', t: '日本海はずっと左にあった。' }
+    ] },
 
   { title: '瀬戸内、島から島へ',
     body: 'しまなみ海道を自転車で渡りきるつもりだったが、三日目に雨が降って、結局フェリーに乗った。島と島を繋ぐ船は一日に四便しかない。',
     from: '尾道', to: '今治', modes: ['cycling','ferry'],
-    km: 78, spots: 6, author: 'こう', at: '1週間前', replies: 7, cover: null },
+    km: 78, author: 'こう', at: '1週間前', replies: 7, cover: null,
+    journey: [
+      { n: '尾道駅',   c: [133.19299, 34.40479], d: '2026年6月10日', t: '自転車を借りた。渡し船で向島へ渡るところから始まる。' },
+      { n: '向島',     c: [133.19466, 34.38303], m: 'ferry',   d: '2026年6月10日', t: '' },
+      { n: '因島',     c: [133.18028, 34.29032], m: 'cycling', d: '2026年6月10日', t: '橋を渡るたびに、下を見る余裕がなくなっていく。' },
+      { n: '瀬戸田',   c: [133.09195, 34.26569], m: 'cycling', d: '2026年6月11日', t: '' },
+      { n: '大三島',   c: [132.95801, 34.21695], m: 'cycling', d: '2026年6月12日', t: '三日目に雨が降って、結局フェリーに乗った。' },
+      { n: '今治駅',   c: [132.99385, 34.06411], m: 'ferry',   d: '2026年6月12日', t: '島と島を繋ぐ船は一日に四便しかない。' }
+    ] },
 
   { title: '冬の東北、駅で眠った夜のこと',
     body: '雪で列車が止まり、その日は駅の待合室で夜を明かした。ストーブの前に同じ境遇の人が四人いて、誰も何も言わずに朝を待った。',
     from: '仙台', to: '青森', modes: ['railTrack','transit'],
-    km: 386, spots: 8, author: 'あき', at: '2週間前', replies: 11, cover: null },
+    km: 386, author: 'あき', at: '2週間前', replies: 11, cover: null,
+    journey: [
+      { n: '仙台駅',     c: [140.88204, 38.26056], d: '2026年2月3日', t: '雪の予報は出ていた。それでも行くことにした。' },
+      { n: '松島海岸駅', c: [141.05884, 38.36837], m: 'railTrack', d: '2026年2月3日', t: '島が白かった。' },
+      { n: '小牛田駅',   c: [141.06442, 38.54066], m: 'railTrack', d: '2026年2月3日', t: '' },
+      { n: '一ノ関駅',   c: [141.13814, 38.92661], m: 'railTrack', d: '2026年2月4日', t: '' },
+      { n: '北上駅',     c: [141.12256, 39.28224], m: 'railTrack', d: '2026年2月4日', t: 'ここで列車が止まった。動く見込みは無いと言われた。' },
+      { n: '盛岡駅',     c: [141.13637, 39.7012],  m: 'transit',   d: '2026年2月5日', t: '駅の待合室で夜を明かした。同じ境遇の人が四人いた。' },
+      { n: '八戸駅',     c: [141.43094, 40.50932], m: 'railTrack', d: '2026年2月5日', t: '' },
+      { n: '青森駅',     c: [140.73465, 40.83032], m: 'railTrack', d: '2026年2月5日', t: '誰も何も言わずに朝を待った、あの時間のことを覚えている。' }
+    ] },
 
   { title: '能登を半周、車で',
     body: '海沿いの道をひたすら北へ。対向車がほとんど来ない時間帯があって、そのあいだは自分の車の音しか聞こえなかった。',
     from: '金沢', to: '珠洲', modes: ['driving'],
-    km: 168, spots: 5, author: 'はる', at: '3週間前', replies: 1, cover: null },
+    km: 168, author: 'はる', at: '3週間前', replies: 1, cover: null,
+    journey: [
+      { n: '金沢駅', c: [136.64778, 36.57831], d: '2026年5月2日', t: '海沿いの道をひたすら北へ。' },
+      { n: '羽咋駅', c: [136.78339, 36.89706], m: 'driving', d: '2026年5月2日', t: '' },
+      { n: '七尾駅', c: [136.96422, 37.04178], m: 'driving', d: '2026年5月2日', t: '' },
+      { n: '輪島',   c: [136.89917, 37.39055], m: 'driving', d: '2026年5月3日', t: '対向車がほとんど来ない時間帯があった。' },
+      { n: '珠洲',   c: [137.26048, 37.43637], m: 'driving', d: '2026年5月3日', t: 'そのあいだは、自分の車の音しか聞こえなかった。' }
+    ] },
 
   { title: '歩いて越えた、旧街道の峠',
     body: '一日で越えられると聞いていたが、実際には日が暮れた。峠の上で振り返ると、来た道の灯りが点々と続いていた。',
     from: '軽井沢', to: '横川', modes: ['walking'],
-    km: 11, spots: 4, author: 'みさき', at: '1か月前', replies: 3, cover: null }
+    km: 11, author: 'みさき', at: '1か月前', replies: 3, cover: null,
+    journey: [
+      { n: '軽井沢駅', c: [138.63498, 36.3426],  d: '2026年10月12日', t: '一日で越えられると聞いていた。' },
+      { n: '旧軽井沢', c: [138.63576, 36.3598],  m: 'walking', d: '2026年10月12日', t: '' },
+      { n: '碓氷峠',   c: [138.65063, 36.34446], m: 'walking', d: '2026年10月12日', t: '峠の上で振り返ると、来た道の灯りが点々と続いていた。' },
+      { n: '横川駅',   c: [138.7379, 36.33597],  m: 'walking', d: '2026年10月12日', t: '実際には日が暮れた。' }
+    ] }
 ];
+
+/* 旅程を、旅情が読める形の住所に変える。
+
+   index.html の encodeState と同じ形にすること。
+   中身は { name, s: [{n,d,t,c,m,v}] } を JSON にして base64 に直したもの。
+   URLに入れるので、+ と / は - と _ に置き換え、末尾の = は落とす。 */
+function tripLink(p) {
+  const lite = p.journey.map(function (x) {
+    return { n: x.n, d: x.d || '', t: x.t || '', c: x.c, m: x.m || null, v: [] };
+  });
+  const json = JSON.stringify({ name: p.title, s: lite });
+  const bytes = new TextEncoder().encode(json);
+  let bin = '';
+  bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+  const code = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return 'index.html#d=' + code;
+}
 
 function card(p) {
   const el = document.createElement('article');
@@ -250,7 +335,8 @@ function card(p) {
   el.querySelector('.ends .b').textContent = p.to;
   el.querySelector('.ends2').textContent = p.from + ' ▶ ' + p.to;
   el.querySelectorAll('.km').forEach(function (k) {
-    k.textContent = p.km.toLocaleString() + 'km ・ ' + p.spots + 'か所';
+    // か所の数は旅程から数える。書き写すと、直したときに食い違う。
+    k.textContent = p.km.toLocaleString() + 'km ・ ' + p.journey.length + 'か所';
   });
   el.querySelector('h2').textContent = p.title;
   el.querySelector('.lead').textContent = p.body;
@@ -258,6 +344,24 @@ function card(p) {
   el.querySelector('.who').textContent = p.author;
   el.querySelector('.at').textContent = p.at;
   el.querySelector('.re').textContent = p.replies ? ('返信 ' + p.replies) : '';
+
+  /* 札そのものを押せるようにする。
+
+     中の文字を選べなくなるので、a で包むのではなく札に手を付ける。
+     文字をなぞっただけのときは開かない（選択が残っていれば見送る）。 */
+  const href = tripLink(p);
+  el.classList.add('open');
+  el.setAttribute('role', 'link');
+  el.setAttribute('tabindex', '0');
+  el.title = p.title + ' を見る';
+  el.addEventListener('click', function () {
+    const sel = window.getSelection();
+    if (sel && String(sel).length > 2) return;
+    location.href = href;
+  });
+  el.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); location.href = href; }
+  });
   return el;
 }
 
