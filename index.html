@@ -1833,6 +1833,35 @@ const STOP_PITCH = 64;
 const TRAVEL_ZOOM = 8.6;
 const TRAVEL_PITCH = 48;
 
+/* タイルを何枚まで手元に置いておくか。
+
+   512×512のタイルは、圧縮された状態では54KBでも、
+   画面に出すために展開すると1枚あたり1MBになる。
+   つまり「枚数 ≒ MB」と思ってよい。
+
+   以前は1500枚（約1.5GB）で、明らかに多すぎた。
+   その反省で120枚まで絞ったが、今度は少なすぎた。
+   冒頭デモは札幌から那覇までを何周もするので、
+   一周ぶんを抱えきれないと、二周目もまた一から読み直すことになる。
+   ちらつくのはそのためで、待ち時間ではなく抱える量の問題だった。
+
+   一周ぶんは、地点7つと移動の絵を合わせて400枚ほど。
+   余力のある端末ではそこまで持たせ、そうでない端末では抑える。
+
+   navigator.deviceMemory は Chrome と Edge だけが答える（単位はGB）。
+   Safari と Firefox は答えないので、そのときは画面の広さで代える。
+   スマホでタブごと落とされるのがいちばん困るので、迷ったら少ないほうへ。 */
+function tileCacheSize() {
+  const w = window.innerWidth || 1000;
+  const gb = navigator.deviceMemory;          // 分からなければ undefined
+
+  if (w < 900) return 120;                    // スマホ・小さい窓
+  if (gb === undefined) return 250;           // 答えない端末。控えめに
+  if (gb >= 8) return 400;                    // 一周ぶんを抱えられる
+  if (gb >= 4) return 250;
+  return 120;
+}
+
 const map = new maplibregl.Map({
   container: 'map',
   style: styleFor(baseStyle),
@@ -1848,17 +1877,16 @@ const map = new maplibregl.Map({
   attributionControl: false,
   refreshExpiredTiles: false,
 
-  // タイルを何枚まで手元に置いておくか。
-  //
-  // 512×512のタイルは、圧縮された状態では54KBでも、
-  // 画面に出すために展開すると1枚あたり1MBになる。
-  // 以前は1500枚に設定していて、それだけで1.5GBを占めていた。
-  //
-  // いまは移動が遅く、動き出す前にタイルを待つので、
-  // 大量に抱えておく必要がない。
-  // 60枚まで絞ったが、削りすぎると同じタイルを何度も取り直すことになり、
-  // かえって読み込みが遅く見える。120枚（約120MB相当）で折り合いをつける。
-  maxTileCacheSize: 120
+  // 抱えるタイルの枚数。端末の余力で決める（tileCacheSize を見ること）
+  maxTileCacheSize: tileCacheSize(),
+
+  /* 一度に何枚まで並べて取りに行くか。既定は16枚。
+
+     多いほど早く絵が揃うが、地理院のタイルは無償で開放されている
+     公共のものなので、際限なく叩くべきではない。
+     24枚に留める。ブラウザ側の同時接続の上限もあるため、
+     これ以上増やしても実際にはあまり変わらない。 */
+  maxParallelImageRequests: 24
 });
 
 /* 下の隅に入れたものは、足した順とは逆に、後から足したものが上へ来る。
