@@ -5154,6 +5154,141 @@ function stationResult(st) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   空港を、場所としても探せるようにする
+
+   飛行機の区間を引くための一覧（data/air/airports.json）は前からあったが、
+   場所の検索はそれを見ていなかった。そのため「伊丹空港」と打っても
+   何も出なかった。一覧のほうには最初から入っていたのに、である。
+
+   空港は、正式な名前と人が口にする名前が違うことがある。
+   一覧が持っているのは通称のほう（伊丹空港・羽田空港）なので、
+   正式名や愛称はここで補う。
+
+     name  出すときの名前。正式名があるものはそちら
+     also  打たれうるほかの呼び方
+
+   Wikipedia の転送を引く手もあるが、そのたびに外へ2回問い合わせることに
+   なるうえ、転送先が場所とは限らない。ここに書けば通信は0回で済む。
+   --------------------------------------------------------------------------- */
+const AIRPORT_ALIAS = {
+  HND: { name: '東京国際空港',   also: ['羽田空港'] },
+  ITM: { name: '大阪国際空港',   also: ['伊丹空港', '大阪空港'] },
+  NGO: { name: '中部国際空港',   also: ['セントレア'] },
+  OKD: { name: '丘珠空港',       also: ['札幌飛行場'] },
+  KMJ: { name: '熊本空港',       also: ['阿蘇くまもと空港'] },
+  KCZ: { name: '高知空港',       also: ['高知龍馬空港'] },
+  YGJ: { name: '米子空港',       also: ['米子鬼太郎空港'] },
+  IZO: { name: '出雲空港',       also: ['出雲縁結び空港'] },
+  TKS: { name: '徳島空港',       also: ['徳島阿波おどり空港'] },
+  KMI: { name: '宮崎空港',       also: ['宮崎ブーゲンビリア空港'] },
+  TOY: { name: '富山空港',       also: ['富山きときと空港'] },
+  FSZ: { name: '静岡空港',       also: ['富士山静岡空港'] },
+  MMJ: { name: '松本空港',       also: ['信州まつもと空港'] },
+  HNA: { name: '花巻空港',       also: ['いわて花巻空港'] },
+  OBO: { name: '帯広空港',       also: ['とかち帯広空港'] },
+  KUH: { name: '釧路空港',       also: ['たんちょう釧路空港'] },
+  HSG: { name: '佐賀空港',       also: ['九州佐賀国際空港'] },
+  ISG: { name: '石垣空港',       also: ['南ぬ島石垣空港', '新石垣空港'] },
+  UKB: { name: '神戸空港',       also: ['マリンエア'] },
+  KIX: { name: '関西国際空港',   also: ['関空', '関西空港'] },
+  /* 正式名に「国際」が入るものは、短く呼ばれたときに当たらない。
+     「成田空港」は「成田国際空港」の一部ではないため。 */
+  NRT: { name: '成田国際空港',   also: ['成田空港'] },
+  CTS: { name: '新千歳空港',     also: ['千歳空港'] }
+};
+
+let airportIndexCache = null;
+
+/* 探しやすい形に直した空港の一覧を作る。一度だけ。 */
+async function airportIndex() {
+  if (airportIndexCache) return airportIndexCache;
+
+  let list;
+  try { list = await airports(); } catch (err) { return []; }
+
+  airportIndexCache = list.map(function (a) {
+    const iata = a[3] || '';
+    const alias = AIRPORT_ALIAS[iata];
+    const name = (alias && alias.name) || a[2] || iata;
+
+    /* 打たれうる呼び方を全部集める。一覧が持つ通称も忘れずに入れる。
+       同じ言葉が二度入ると「伊丹空港・伊丹空港」と出てしまうので、
+       入れる前に既にあるかを見る。 */
+    const words = [];
+    function addWord(w) { if (w && words.indexOf(w) < 0) words.push(w); }
+    addWord(name);
+    addWord(a[2]);
+    if (alias && alias.also) alias.also.forEach(addWord);
+    addWord(iata);
+
+    return {
+      name: name,
+      other: words.slice(1),
+      keys: words.map(normKey),
+      coord: [a[0], a[1]],
+      size: a[4] || 0
+    };
+  });
+  return airportIndexCache;
+}
+
+function airportResult(ap) {
+  return {
+    name: ap.name,
+    address: ap.other.slice(0, 2).join('・'),
+    cats: ['airport'],
+    coord: ap.coord
+  };
+}
+
+// 打った通りに当たる空港。手元だけで済むので通信は起きない。
+async function searchAirports(text, limit) {
+  const list = await airportIndex();
+  const q = normKey(text);
+  if (q.length < 2) return [];
+
+  /* 「ITM」のような3文字は、英語の空港名の途中にも埋まっている。
+     DetroITMetropolitan、Van FerITMelen…。
+     短い言葉は、ぴったり同じものだけを認める。 */
+  const exactOnly = q.length <= 3;
+
+  const hit = [];
+  for (let i = 0; i < list.length; i++) {
+    let sc = 9;
+    for (let k = 0; k < list[i].keys.length; k++) {
+      const one = nameScore(list[i].keys[k], q);
+      if (exactOnly && one !== 0) continue;
+      sc = Math.min(sc, one);
+    }
+    if (sc < 9) hit.push({ a: list[i], sc: sc });
+  }
+  // 同じ点数なら、大きい空港を先に。名古屋なら中部国際が県営より前へ。
+  hit.sort(function (x, y) {
+    if (x.sc !== y.sc) return x.sc - y.sc;
+    return (y.a.size || 0) - (x.a.size || 0);
+  });
+  return hit.slice(0, limit).map(function (h) { return airportResult(h.a); });
+}
+
+// 打ち間違いに近い空港
+async function nearAirports(text, limit) {
+  const list = await airportIndex();
+  const q = normKey(text);
+  if (q.length < NEAR_MIN_LEN) return [];
+
+  const hit = [];
+  for (let i = 0; i < list.length; i++) {
+    let sc = 0;
+    for (let k = 0; k < list[i].keys.length; k++) {
+      sc = Math.max(sc, nearSim(q, list[i].keys[k]));
+    }
+    if (sc >= NEAR_MIN) hit.push({ a: list[i], sc: sc });
+  }
+  hit.sort(function (x, y) { return y.sc - x.sc; });
+  return hit.slice(0, limit).map(function (h) { return airportResult(h.a); });
+}
+
 // 打ち間違いに近い駅を、近い順に返す
 async function nearStations(text, limit) {
   /* 国土数値情報は「東京」のように駅名だけを持っているので、
@@ -5253,12 +5388,25 @@ async function searchAddress(text, limit) {
 }
 
 async function searchPlaces(text) {
-  // 手元の駅と、外の地名は同時に走らせる。遅いほうに引きずられない。
+  /* 手元のもの（駅・空港）と、外の地名は同時に走らせる。
+     遅いほうに引きずられない。手元の2つは通信が起きない。 */
   const both = await Promise.all([
     searchStations(text, 4),
-    searchAddress(text, 30)
+    searchAddress(text, 30),
+    searchAirports(text, 3)
   ]);
-  const st = both[0], ad = both[1].list, adFailed = both[1].failed;
+  const ad = both[1].list, adFailed = both[1].failed;
+
+  /* 空港を駅より先に出す。
+
+     「羽田空港」と打つ人が見たいのは空港であって、
+     羽田空港第1ターミナル駅ではない。だが駅のほうが数が多いので、
+     駅を先にすると4つの枠が全部ターミナル駅で埋まり、
+     肝心の東京国際空港がこぼれ落ちていた。
+
+     近いからといって空港を消しもしない。駅と空港は別の場所であり、
+     飛行機で来た人は空港を、電車で来た人は駅を選ぶ。 */
+  const st = both[2].concat(both[0]);
 
   /* 地理院は一文字でも当たると返してくる。「東京駅」で
      「北海道札幌市東区」のような的外れが並ぶので、
@@ -5314,6 +5462,7 @@ async function searchPlaces(text) {
 
   ad.forEach(add);
   (await nearStations(text, 6)).forEach(add);
+  (await nearAirports(text, 3)).forEach(add);
 
   /* 短くして聞き直すのは、候補があっても必ず行う。
 
