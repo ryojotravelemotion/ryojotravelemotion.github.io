@@ -1368,6 +1368,7 @@ body.odpt-open #odptPanel, body.supa-open #supaPanel { display: flex; }
       <div>航路　<b>&copy; OpenStreetMap contributors</b>（ODbL）</div>
       <div>空港　<b>OurAirports</b>　／　地図　<b>地理院タイル</b>（国土地理院）</div>
       <div>地名検索　<b>地理院地名検索</b>（国土地理院）　／　道路の経路　<b>Mapbox</b></div>
+      <div>写真・愛称　<b>Wikipedia</b>（CC BY-SA）</div>
 
       <div class="legal"><a href="terms.html">利用規約</a>　／　<a href="privacy.html">プライバシーポリシー</a></div>
 
@@ -5095,6 +5096,19 @@ function diceSim(a, b) {
   return 2 * hit / (A.length + B.length);
 }
 
+/* 地理院は、その名前の付いた施設も同じ重みで返してくる。
+   「兼六園」と打つと、交番・郵便局・庭園の3件が並び、庭園が最後に来ていた。
+   打った言葉にその語が入っていない限り、施設は後ろへ回す。
+
+   町名（金閣寺町など）は回さない。町そのものを指したい人がいるうえ、
+   位置もほぼ同じところにあるため。 */
+const PLACE_FACILITY = /(郵便局|交番|駐在所|派出所|消防署|警察署|市役所|区役所|役場|出張所|事務所|支局|支店|営業所|工場|倉庫|団地|ＩＣ|インターチェンジ|トンネル|料金所|変電所|浄水場|clinic|病院|医院)/;
+
+function isFacility(name, q) {
+  const m = String(name || '').match(PLACE_FACILITY);
+  return !!m && String(q || '').indexOf(m[1]) < 0;
+}
+
 /* 探している文字に近いものほど上へ。前から一致するものを優先する。
    駅にも地名にも使う。 */
 function nameScore(name, q) {
@@ -5431,17 +5445,56 @@ async function searchPlaces(text) {
 
   /* 地理院は思い当たった順に返してくるだけで、近い名前が先とは限らない。
      「大阪国際空港」と入れると「豊中郵便局大阪国際空港内分室」が先に来る。
-     打った言葉そのもの、次に前から一致するもの、同じなら短いものを上へ。 */
+
+     郵便局や交番のような施設は、まとめて後ろへ回す。
+     そのうえで、打った言葉そのもの・前から一致・短いもの、の順に並べる。 */
+  near.forEach(function (h) { h.fac = isFacility(h.a.name, text) ? 1 : 0; });
   near.sort(function (x, y) {
+    if (x.fac !== y.fac) return x.fac - y.fac;
     if (x.sc !== y.sc) return x.sc - y.sc;
     return x.a.name.length - y.a.name.length;
   });
 
   const out = st.concat(near.map(function (h) { return h.a; })).slice(0, 6);
-  if (out.length) return out;
+
+  /* 打った言葉と寸分違わないものが1つでもあれば、それが答えである。
+     ここで切り上げれば、駅名や地名を打った大多数の場合に通信は増えない。
+
+     無いときは、地理院に載っていない愛称かもしれない。
+     「白川郷」では地理院が学園や道の駅を返すが、白川郷そのものは無い。
+     別名（空港の通称など）で当たっているものも、当たったうちに数える。 */
+  const qx = normKey(text);
+  const exact = out.some(function (r) {
+    return normKey(r.name) === qx || normKey(r.address || '').indexOf(qx) >= 0;
+  });
+  if (out.length && exact) return out;
 
   // 地名のほうが通じていないなら、「無い」ではなく「分からなかった」
-  if (adFailed) { const bad = []; bad.failed = true; return bad; }
+  if (adFailed && !out.length) { const bad = []; bad.failed = true; return bad; }
+
+  const wiki = await wikiPlace(text);
+
+  /* ほかに候補はあるが、ぴったりのものが無かった場合。
+     Wikipedia が解けたならそれを先頭に足し、残りはそのまま後ろへ。
+
+     ただし海外の同名の場所には気をつける。
+     「ディズニーランド」の記事はカリフォルニアのほうを指しており、
+     そのまま先頭に置くと、東京の舞浜を探していた人に
+     北緯33度・西経117度が出てしまう。
+     国内の候補が挙がっているなら、海外のものは後ろへ回す。 */
+  if (out.length) {
+    if (!wiki.length) return out;
+
+    const rest = out.filter(function (r) {
+      return !wiki.some(function (w) { return dist(w.coord, r.coord) * 111 < 0.4; });
+    });
+
+    const domestic = out.some(function (r) { return inJapan(r.coord); });
+    const head = domestic ? wiki.filter(function (w) { return inJapan(w.coord); }) : wiki;
+    const tail = domestic ? wiki.filter(function (w) { return !inJapan(w.coord); }) : [];
+
+    return head.concat(rest).concat(tail).slice(0, 6);
+  }
 
   /* ここから先は「打った通りのものは無かった」場合。
      何も出さずに終わらせず、近いものを集めて出す。集めるのは3種類。
@@ -5460,6 +5513,7 @@ async function searchPlaces(text) {
     cands.push(r);
   }
 
+  wiki.forEach(add);       // 愛称はここで解けている
   ad.forEach(add);
   (await nearStations(text, 6)).forEach(add);
   (await nearAirports(text, 3)).forEach(add);
@@ -5473,13 +5527,18 @@ async function searchPlaces(text) {
   (await nearAddress(text, 12)).forEach(add);
   if (!cands.length) return [];
 
-  // 近い順に並べ替える。地理院が読みで拾ったものは 0 になるが、順は保たれる。
+  /* 近い順に並べ替える。
+     Wikipedia が解いたものは、打った言葉そのものが記事に当たっている。
+     推測ではないので、文字の近さを測らずに先頭へ置く。 */
   const qn = normKey(text);
-  cands.forEach(function (r) { r._near = nearSim(qn, normKey(r.name)); });
+  cands.forEach(function (r) {
+    r._near = (r.cats && r.cats[0] === 'wiki') ? 2 : nearSim(qn, normKey(r.name));
+  });
   cands.sort(function (a, b) { return b._near - a._near; });
 
   const res = cands.slice(0, 6);
-  res.near = true;
+  // Wikipedia で解けたなら推測ではないので、「もしかして」とは言わない
+  res.near = !wiki.length;
   return res;
 }
 
@@ -5659,6 +5718,51 @@ function firstThumb(json) {
 // はじめの画面のカードは幅280pxほど。1000pxの写真を取ると、
 // 展開したとき1枚2.5MBになり、6枚で15MBを無駄に抱えることになる。
 const INTRO_IMG_SIZE = 480;
+
+/* 打った言葉が地理院にも手元にも無かったときの、最後の手段。
+
+   Wikipedia には転送がある。「金閣寺」は「鹿苑寺」へ、
+   「USJ」は「ユニバーサル・スタジオ・ジャパン」へ自動で読み替えられる。
+   愛称は世に無数にあり、こちらで一覧を抱えても追いつかない。
+   世界中の人が書き足していく仕組みに乗るほうが行き届く。
+
+   座標の付いている記事だけを場所として扱う。
+   「アメヤ横丁」「六本木ヒルズ」のように、記事はあっても座標が無いものは
+   地図に置けないので見送る。
+
+   呼ぶのは、ほかで何も見つからなかったときだけ。ふだんは通信が増えない。 */
+/* 日本のだいたいの囲い。駅データも地理院も日本しか持っていないので、
+   「国内の候補が挙がったかどうか」を見るのに使う。 */
+function inJapan(c) {
+  return c && c[0] >= 122 && c[0] <= 154 && c[1] >= 20 && c[1] <= 46;
+}
+
+async function wikiPlace(text) {
+  const q = String(text || '').trim();
+  if (q.length < 2) return [];
+
+  const url = WIKI + '?action=query&format=json&origin=*&redirects=1' +
+    '&prop=coordinates&titles=' + encodeURIComponent(q);
+
+  let json;
+  try { json = await getJson(url); }
+  catch (err) { console.warn('Wikipediaに聞けませんでした', err); return []; }
+
+  const pages = (json && json.query && json.query.pages) || {};
+  const out = [];
+  Object.keys(pages).forEach(function (k) {
+    const pg = pages[k];
+    const c = pg && pg.coordinates && pg.coordinates[0];
+    if (!c || typeof c.lon !== 'number' || typeof c.lat !== 'number') return;
+    out.push({
+      name: pg.title,
+      address: (pg.title === q) ? 'Wikipedia' : (q + '（Wikipedia）'),
+      cats: ['wiki'],
+      coord: [c.lon, c.lat]
+    });
+  });
+  return out;
+}
 
 async function wikiByName(name) {
   if (!name) return null;
