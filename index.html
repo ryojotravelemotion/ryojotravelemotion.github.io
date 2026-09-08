@@ -243,6 +243,27 @@ body.has-spots #searchBox .nextHead { display: flex; }
 
 .legBlock { background: #f2f7f9; border: 1px solid #cfe0e6; border-radius: 4px;
   padding: 10px; margin-bottom: 11px; }
+/* 移動の決め方を、順を追った形にする。
+
+   以前は乗り物が選択欄の中に隠れていた。新しく足した地点は
+   黙って「鉄道」になるので、車で行ったのに鉄道のまま線が引かれ、
+   気づかないということが起きる。
+   7つを並べて見せ、いま何が選ばれているかを一目で分かるようにする。 */
+.stepHead { display: flex; align-items: center; gap: 7px;
+  margin: 11px 0 6px; font-size: 12px; font-weight: 600; color: var(--accent-d); }
+.stepHead .no { flex: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 400;
+  display: flex; align-items: center; justify-content: center; }
+
+.modeGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.modeBtn { display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 2px 6px; font-size: 15px; line-height: 1; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: 4px;
+  color: var(--text); transition: background .15s, border-color .15s; }
+.modeBtn span { font-size: 10.5px; letter-spacing: -.5px; }
+.modeBtn:hover { border-color: var(--accent); background: #f2f7f9; }
+.modeBtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 .legHead { font-size: 11.5px; color: var(--accent-d); font-weight: 700;
   margin-bottom: 7px; letter-spacing: .5px; }
 .stEmpty { font-size: 11.5px; color: var(--muted); padding: 6px 2px 8px; line-height: 1.7; }
@@ -4605,41 +4626,53 @@ function buildEditForm(s, index) {
   let legHtml = '';
   if (index > 0) {
     const fromName = spots[index - 1].name || '前の場所';
+    /* ①どうやって来たか → ②どの道すじで、の順に並べる。
+       置く順がそのまま決める順になるようにしておく。 */
+    const modeButtons = Object.keys(MODES).map(function (k) {
+      return '<button type="button" class="modeBtn' + (s.mode === k ? ' on' : '') +
+             '" data-mode="' + k + '" title="' + MODES[k].label + '">' +
+             MODES[k].ico + '<span>' + MODES[k].label + '</span></button>';
+    }).join('');
+
+    const routeTip =
+      (s.mode === 'railTrack'
+        ? '<div class="tip">実際の線路をたどります。区間ごとに分けて探すので、' +
+          '<b>途中の駅を入れて1区間を短くするほど、1回あたりが軽くなり成功しやすくなります。</b>' +
+          '長距離を一気に指定すると、時間がかかるか、見つからずに直線へ戻ることがあります。</div>'
+        : '') +
+      (s.mode === 'ferry'
+        ? '<div class="tip">実際の航路をたどります。' +
+          '<b>定期航路が見つからないときは、海の上に経由地を置いてください。</b>' +
+          'そのままだと陸を横切る線になります。</div>'
+        : '') +
+      (s.mode === 'flight' ? flightTip(s) : '');
+
+    const routeControls = (armedVia === s.id)
+      ? '<div class="picking">' +
+          '<b>' + (isRail(s.mode) ? stationRole(viaList(s).length) : '経由地') + 'を選んでいます</b>' +
+          '<span>下の検索欄で駅名を入れるか、地図をクリック</span>' +
+          '<button data-act="donevia">完了</button>' +
+        '</div>'
+      : '<div class="viaRow">' +
+          '<button data-act="via">' +
+            (isRail(s.mode)
+              ? (viaList(s).length === 0 ? '乗車駅を指定する' : '駅を追加する')
+              : '経由地を追加する') +
+          '</button>' +
+          '<button data-act="clearvia">すべて消す</button>' +
+        '</div>';
+
     legHtml =
       '<div class="legBlock">' +
         '<div class="legHead">' + fromName + ' → ここ　の移動</div>' +
-        '<select data-f="mode">' +
-          Object.keys(MODES).map(function (k) {
-            return '<option value="' + k + '"' + (s.mode === k ? ' selected' : '') + '>' +
-                   MODES[k].ico + ' ' + MODES[k].label + '</option>';
-          }).join('') +
-        '</select>' +
+
+        '<div class="stepHead"><span class="no">1</span>どうやって来ましたか</div>' +
+        '<div class="modeGrid" data-f="mode">' + modeButtons + '</div>' +
+
+        '<div class="stepHead"><span class="no">2</span>どの道すじで</div>' +
+        routeTip +
         '<div class="stations"></div>' +
-        (armedVia === s.id
-          ? '<div class="picking">' +
-              '<b>' + (isRail(s.mode) ? stationRole(viaList(s).length) : '経由地') + 'を選んでいます</b>' +
-              '<span>下の検索欄で駅名を入れるか、地図をクリック</span>' +
-              '<button data-act="donevia">完了</button>' +
-            '</div>'
-          : '<div class="viaRow">' +
-              '<button data-act="via">' +
-                (isRail(s.mode)
-                  ? (viaList(s).length === 0 ? '乗車駅を指定する' : '駅を追加する')
-                  : '経由地を追加する') +
-              '</button>' +
-              '<button data-act="clearvia">すべて消す</button>' +
-            '</div>') +
-        (s.mode === 'railTrack'
-          ? '<div class="tip">実際の線路をたどります。区間ごとに分けて探すので、' +
-            '<b>途中の駅を入れて1区間を短くするほど、1回あたりが軽くなり成功しやすくなります。</b>' +
-            '長距離を一気に指定すると、時間がかかるか、見つからずに直線へ戻ることがあります。</div>'
-          : '') +
-        (s.mode === 'ferry'
-          ? '<div class="tip">実際の航路をたどります。' +
-            '<b>定期航路が見つからないときは、海の上に経由地を置いてください。</b>' +
-            'そのままだと陸を横切る線になります。</div>'
-          : '') +
-        (s.mode === 'flight' ? flightTip(s) : '') +
+        routeControls +
       '</div>';
   }
 
@@ -4760,11 +4793,16 @@ function buildEditForm(s, index) {
     });
   });
 
-  const modeSel = f.querySelector('[data-f=mode]');
-  if (modeSel) {
-    modeSel.addEventListener('change', async function () {
-      s.mode = modeSel.value;
-      await rebuild();
+  const modeBox = f.querySelector('[data-f=mode]');
+  if (modeBox) {
+    // 乗り物の札。押したものへ切り替えて、経路を引き直す。
+    modeBox.querySelectorAll('.modeBtn').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        const next = b.dataset.mode;
+        if (next === s.mode) return;
+        s.mode = next;
+        await rebuild();
+      });
     });
     const viaBtn = f.querySelector('[data-act=via]');
     if (viaBtn) viaBtn.addEventListener('click', function () { setArmedVia(s.id); });
