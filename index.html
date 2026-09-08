@@ -304,6 +304,19 @@ body.has-spots #searchBox .nextHead { display: flex; }
    丸のままだと数字がはみ出すため、横長の小判にする。 */
 .pin.multi { width: auto; min-width: 26px; padding: 0 8px; border-radius: 13px;
   letter-spacing: .5px; }
+/* 走っているあいだ、線の先頭を進む乗り物。
+
+   絵文字はどれも左を向いて描かれているので、東へ進むときだけ裏返す。
+   飛行機は右上を向いているので裏返さない。
+   はじめの画面で流れる帯と同じ決まりにしてある。
+
+   MapLibre の目印は、渡した要素そのものに transform を書き込む。
+   裏返しを同じ要素に書くと取り合いになるので、中の span で裏返す。 */
+.runveh { pointer-events: none; }
+.runveh .v { display: block; font-size: 26px; line-height: 1;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .5)); }
+.runveh .v.flip { transform: scaleX(-1); }
+
 .vpin { width: 11px; height: 11px; border-radius: 50%; background: #fff;
   border: 2px solid var(--accent); box-shadow: 0 1px 5px rgba(0,0,0,.5); }
 
@@ -1531,6 +1544,12 @@ const MODES = {
   driving: { label: '車', ico: '🚗', api: 'driving',
     tint: '#6f7a44', ink: '#4c5527',
     travel: { zoom: 11.2, pitch: 60, ms: 15000, min: 6000, max: 16000, samples: 6, look: 0.12 } },
+
+  /* バイクは Mapbox に専用の探し方が無いので、車と同じ道路をたどる。
+     見た目の速さと寄りだけ、車より少しだけ軽くしてある。 */
+  motorbike: { label: 'バイク', ico: '🏍️', api: 'driving',
+    tint: '#a34d4d', ink: '#7a2f2f',
+    travel: { zoom: 11.8, pitch: 60, ms: 13000, min: 5500, max: 15000, samples: 6, look: 0.12 } },
 
   walking: { label: '徒歩', ico: '🚶', api: 'walking',
     tint: '#8a8478', ink: '#5f6d7c', dash: true,
@@ -3327,6 +3346,39 @@ async function pullBack(i, alive) {
   return alive() ? tz : null;
 }
 
+/* 走っているあいだだけ立てる乗り物の目印。
+
+   到着の印（apin）と同じで、一度に1つしか出ない。
+   毎こま位置を書き換えるので、作り直さずに使い回す。 */
+let vehMarker = null;
+let vehIcon = null;
+
+function showVehicle(mode, coord, goingEast) {
+  hideVehicle();
+  const conf = MODES[legacyMode(mode)];
+  if (!conf || !coord) return;
+
+  const el = document.createElement('div');
+  el.className = 'runveh';
+  el.innerHTML = '<span class="v"></span>';
+
+  vehIcon = el.querySelector('.v');
+  vehIcon.textContent = conf.ico;
+  // 飛行機はもともと右上を向いているので、裏返すと下を向いてしまう
+  if (goingEast && mode !== 'flight') vehIcon.classList.add('flip');
+
+  vehMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
+    .setLngLat(coord).addTo(map);
+}
+
+function moveVehicle(coord) {
+  if (vehMarker && coord) vehMarker.setLngLat(coord);
+}
+
+function hideVehicle() {
+  if (vehMarker) { vehMarker.remove(); vehMarker = null; vehIcon = null; }
+}
+
 function flyAlong(coords, duration, o) {
   return new Promise(function (resolve) {
     if (!coords || coords.length < 2) { resolve(); return; }
@@ -3362,12 +3414,17 @@ function flyAlong(coords, duration, o) {
     const gProj = NORTH_UP ? projectOnLine(coords, gA, gKx, gx, gy) : null;
     const gTotal = gProj ? gProj[gProj.length - 1] : 0;
 
+    /* 線の先頭を進む乗り物を出す。向きは区間ぜんたいの向きで決める。
+       曲がるたびに向きを変えると、細かく裏返って落ち着かない。 */
+    showVehicle(opt.mode, coords[0], gx > 0);
+    const done = function () { hideVehicle(); resolve(); };
+
     const t0 = performance.now();
     let lastNow = t0;
     let lastDraw = 0;
 
     function frame(now) {
-      if (!alive()) { resolve(); return; }
+      if (!alive()) { done(); return; }
 
       const dt = Math.min(0.05, Math.max(0.001, (now - lastNow) / 1000));
       lastNow = now;
@@ -3433,6 +3490,7 @@ function flyAlong(coords, duration, o) {
       }
 
       map.jumpTo({ center: center, zoom: zoom, pitch: pitch, bearing: curBrg });
+      moveVehicle(at.pt);            // 線の先頭に乗り物を置き続ける
 
       if (drawLine && (now - lastDraw > DRAW_EVERY || t === 1)) {
         drawRoute(base.concat(coords.slice(0, at.idx + 1), [at.pt]));
@@ -3440,7 +3498,7 @@ function flyAlong(coords, duration, o) {
       }
 
       if (t < 1) requestAnimationFrame(frame);
-      else resolve();
+      else done();
     }
     requestAnimationFrame(frame);
   });
@@ -4149,6 +4207,7 @@ async function runIntro(my) {
           startBearing: NORTH_UP ? 0 : s.bearing + 18,
           endBearing: NORTH_UP ? 0 : next.bearing,
           travel: tv,
+          mode: next.mode,
           zoomStart: NORTH_UP ? tz : s.zoom,
           zoomEnd: NORTH_UP ? tz : next.zoom,
           pitchStart: NORTH_UP ? tv.pitch : s.pitch,
@@ -6532,6 +6591,7 @@ function stopStepping() {
   stepSeq++;
   stepping = false;
   stepSkip = false;
+  hideVehicle();
 }
 
 async function travelToNext() {
@@ -6561,6 +6621,7 @@ async function travelToNext() {
       startBearing: NORTH_UP ? 0 : camFor(from).bearing,
       endBearing: NORTH_UP ? 0 : camFor(to).bearing,
       travel: travelFor(from),
+      mode: spots[to].mode,
       zoomStart: tz, pitchStart: travelFor(from).pitch,
       onProgress: function (t) { ttRun(from, t); }
     });
@@ -6717,6 +6778,7 @@ async function play() {
         endBearing: NORTH_UP ? 0 : camFor(i + 1).bearing,
         base: routeUpTo(i),
         travel: travelFor(i),
+        mode: spots[i + 1].mode,
         zoomStart: tz, pitchStart: travelFor(i).pitch,
         onProgress: function (t) { ttRun(i, t); }
       });
