@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 時計の文字盤に、時刻表の行を重ねた形 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z M54,35a19,19 0,1 0,0 38a19,19 0,1 0,0 -38z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,40h4v13.2l9,5.2l-2,3.5l-11,-6.3z" />
+</vector>

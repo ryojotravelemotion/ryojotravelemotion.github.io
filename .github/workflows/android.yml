@@ -1,0 +1,30 @@
+name: Android
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build
+        # リポジトリの Secrets に ODPT_API_KEY があれば、APK に埋め込む（無ければアプリで入力する）
+        env:
+          ODPT_API_KEY: ${{ secrets.ODPT_API_KEY }}
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jikokuhyo-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
